@@ -1,0 +1,12 @@
+{
+  "name": "@chat/backend",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "@chat/shared": "workspace:*",
+    "@fastify/websocket": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
+  }
+}

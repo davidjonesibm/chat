@@ -1,0 +1,8 @@
+{
+  "name": "@chat/frontend",
+  "version": "0.0.0",
+  "private": true,
+  "dependencies": {
+    "@chat/shared": "workspace:*"
+  }
+}

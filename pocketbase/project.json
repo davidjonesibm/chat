@@ -1,0 +1,29 @@
+{
+  "name": "pocketbase",
+  "$schema": "../node_modules/nx/schemas/project-schema.json",
+  "root": "pocketbase",
+  "sourceRoot": "pocketbase",
+  "projectType": "application",
+  "tags": ["type:service", "scope:backend"],
+  "targets": {
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "./pocketbase serve --dir=./pb_data --migrationsDir=./pb_migrations",
+        "cwd": "pocketbase"
+      },
+      "configurations": {
+        "production": {
+          "command": "./pocketbase serve --dir=./pb_data --migrationsDir=./pb_migrations --http=0.0.0.0:8090"
+        }
+      }
+    },
+    "migrate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "./pocketbase migrate --dir=./pb_data --migrationsDir=./pb_migrations",
+        "cwd": "pocketbase"
+      }
+    }
+  }
+}
