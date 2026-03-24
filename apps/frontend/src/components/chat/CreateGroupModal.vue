@@ -1,0 +1,107 @@
+<script setup lang="ts">
+import { ref, watch } from 'vue';
+import { useChannelStore } from '../../stores/channelStore';
+
+interface Props {
+  modelValue: boolean;
+}
+
+const props = defineProps<Props>();
+
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean];
+  created: [];
+}>();
+
+const channelStore = useChannelStore();
+
+const name = ref('');
+const description = ref('');
+const loading = ref(false);
+const error = ref<string | null>(null);
+
+// Reset form when modal opens
+watch(
+  () => props.modelValue,
+  (isOpen) => {
+    if (isOpen) {
+      name.value = '';
+      description.value = '';
+      error.value = null;
+    }
+  },
+);
+
+function close() {
+  emit('update:modelValue', false);
+}
+
+async function handleSubmit() {
+  if (!name.value.trim()) {
+    error.value = 'Group name is required';
+    return;
+  }
+
+  loading.value = true;
+  error.value = null;
+
+  try {
+    await channelStore.createGroup(name.value.trim(), description.value.trim());
+    emit('created');
+    close();
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to create group';
+  } finally {
+    loading.value = false;
+  }
+}
+</script>
+
+<template>
+  <dialog class="modal" :class="{ 'modal-open': modelValue }">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">Create Group</h3>
+      <form @submit.prevent="handleSubmit">
+        <div class="form-control w-full mt-4">
+          <label class="label">
+            <span class="label-text">Group Name</span>
+          </label>
+          <input
+            v-model="name"
+            type="text"
+            placeholder="e.g. My Team"
+            class="input input-bordered w-full"
+            required
+          />
+        </div>
+
+        <div class="form-control w-full mt-2">
+          <label class="label">
+            <span class="label-text">Description (optional)</span>
+          </label>
+          <input
+            v-model="description"
+            type="text"
+            placeholder="What's this group about?"
+            class="input input-bordered w-full"
+          />
+        </div>
+
+        <div v-if="error" class="alert alert-error mt-4">
+          <span>{{ error }}</span>
+        </div>
+
+        <div class="modal-action">
+          <button type="button" class="btn" @click="close">Cancel</button>
+          <button type="submit" class="btn btn-primary" :disabled="loading">
+            <span v-if="loading" class="loading loading-spinner"></span>
+            Create
+          </button>
+        </div>
+      </form>
+    </div>
+    <form method="dialog" class="modal-backdrop" @click="close">
+      <button type="button">close</button>
+    </form>
+  </dialog>
+</template>

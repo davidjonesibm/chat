@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "dependencies": {
-    "@chat/shared": "workspace:*"
+    "@chat/shared": "workspace:*",
+    "@supabase/supabase-js": "^2.0.0"
   }
 }

@@ -1,110 +1,71 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
-import PocketBase from 'pocketbase';
-import type { User, JwtClaims } from '@chat/shared';
-import { decodeJwt } from '../utils/jwt';
+import type { User } from '@chat/shared';
 
 /**
- * Auth middleware plugin - verifies JWT tokens and attaches user context
- * Skips authentication for public auth routes
+ * Reusable authentication function
+ * Verifies JWT tokens using Supabase's auth.getUser() and attaches user context to request
+ * Use as preHandler in route options: { preHandler: [authenticate] }
+ */
+export async function authenticate(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  // Check for Authorization header
+  const authHeader = request.headers.authorization;
+  if (!authHeader) {
+    throw reply.unauthorized('Missing Authorization header');
+  }
+
+  // Extract token from Bearer schema
+  const token = authHeader.replace('Bearer ', '');
+  if (!token) {
+    throw reply.unauthorized('Invalid Authorization header format');
+  }
+
+  // Verify token using Supabase's built-in verification
+  const { data: { user }, error } = await request.server.supabaseAdmin.auth.getUser(token);
+  if (error || !user) {
+    throw reply.unauthorized('Invalid or expired token');
+  }
+
+  // Build user object from Supabase user data
+  const userObj: User = {
+    id: user.id,
+    email: user.email || '',
+    username: (user.user_metadata?.username as string) || (user.user_metadata?.name as string) || user.email?.split('@')[0] || '',
+    avatar: (user.user_metadata?.avatar as string) || '',
+    created_at: user.created_at,
+    updated_at: user.updated_at || user.created_at,
+  };
+
+  request.user = userObj;
+}
+
+/**
+ * Auth plugin - decorates Fastify instance with authenticate function
+ * Does NOT apply global authentication - routes must opt-in via preHandler
  */
 export default fp(
   async function (fastify: FastifyInstance) {
-    fastify.addHook(
-      'preHandler',
-      async (request: FastifyRequest, reply: FastifyReply) => {
-        // Extract pathname without query string for route matching
-        const pathname = request.url.split('?')[0];
+    // Decorate instance with authenticate function for convenience
+    fastify.decorate('authenticate', authenticate);
 
-        // Skip auth check for public routes
-        if (
-          pathname === '/api/auth/register' ||
-          pathname === '/api/auth/login'
-        ) {
-          return;
-        }
-
-        // Skip auth check for health check
-        if (pathname === '/health') {
-          return;
-        }
-
-        // Check for Authorization header
-        const authHeader = request.headers.authorization;
-        if (!authHeader) {
-          reply.code(401).send({
-            error: 'Unauthorized',
-            message: 'Missing Authorization header',
-          });
-          return;
-        }
-
-        // Extract token from Bearer schema
-        const token = authHeader.replace('Bearer ', '');
-        if (!token) {
-          reply.code(401).send({
-            error: 'Unauthorized',
-            message: 'Invalid Authorization header format',
-          });
-          return;
-        }
-
-        try {
-          // Decode token to get claims
-          const claims = decodeJwt(token);
-          if (!claims) {
-            reply
-              .code(401)
-              .send({ error: 'Unauthorized', message: 'Invalid token format' });
-            return;
-          }
-
-          // Check token expiration
-          if (claims.exp && claims.exp * 1000 < Date.now()) {
-            reply
-              .code(401)
-              .send({ error: 'Unauthorized', message: 'Token expired' });
-            return;
-          }
-
-          // Create a fresh PocketBase instance (don't mutate shared state)
-          const freshPb = new PocketBase(
-            process.env.POCKETBASE_URL || 'http://localhost:8090',
-          );
-          freshPb.authStore.save(token, null);
-          const record = await freshPb.collection('users').getOne(claims.id);
-
-          const user: User = {
-            id: record.id,
-            email: record['email'] as string,
-            username: record['username'] as string,
-            avatar: record['avatar'] as string | undefined,
-            createdAt: record.created,
-            updated: record.updated,
-          };
-
-          // Attach user and claims to request for later use
-          request.user = user;
-          request.claims = claims;
-        } catch (err) {
-          fastify.log.error({ err }, 'Token verification error');
-          reply
-            .code(401)
-            .send({ error: 'Unauthorized', message: 'Invalid token' });
-        }
-      },
-    );
+    fastify.log.info('Auth plugin registered (opt-in authentication)');
   },
   {
     name: 'auth-plugin',
-    dependencies: ['pocketbase-plugin'],
+    dependencies: ['supabase-plugin', '@fastify/sensible'],
   },
 );
 
-// TypeScript module augmentation to add user context to requests
+// TypeScript module augmentation
 declare module 'fastify' {
   interface FastifyRequest {
     user?: User;
-    claims?: JwtClaims;
+  }
+
+  interface FastifyInstance {
+    authenticate: typeof authenticate;
   }
 }

@@ -25,6 +25,18 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/g/:groupId',
+    name: 'group',
+    component: ChatView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/g/:groupId/c/:channelId',
+    name: 'channel',
+    component: ChatView,
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: '/',
   },

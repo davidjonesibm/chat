@@ -1,5 +1,6 @@
 import type { WebSocket } from 'ws';
-import PocketBase from 'pocketbase';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '../../../database.types';
 import type {
   ClientMessage,
   ServerMessage,
@@ -17,9 +18,6 @@ const socketUsers = new Map<WebSocket, WsUser>();
 
 // Track which channels a WebSocket is in
 const socketChannels = new Map<WebSocket, Set<string>>();
-
-// Track auth token per WebSocket for authenticated PocketBase operations
-const socketTokens = new Map<WebSocket, string>();
 
 // Track typing users per channel: channelId -> Set<username>
 const typingUsers = new Map<string, Set<string>>();
@@ -51,28 +49,23 @@ function broadcastToRoom(
 }
 
 /**
- * Send a message to a specific WebSocket
- */
-function sendToSocket(ws: WebSocket, message: ServerMessage): void {
-  if (ws.readyState === 1) {
-    ws.send(JSON.stringify(message));
-  }
-}
-
-/**
  * Add a WebSocket to a channel room
  */
 function joinRoom(ws: WebSocket, channelId: string): void {
-  if (!channelRooms.has(channelId)) {
-    channelRooms.set(channelId, new Set());
+  let room = channelRooms.get(channelId);
+  if (!room) {
+    room = new Set();
+    channelRooms.set(channelId, room);
   }
-  channelRooms.get(channelId)!.add(ws);
+  room.add(ws);
 
   // Track channel membership for this socket
-  if (!socketChannels.has(ws)) {
-    socketChannels.set(ws, new Set());
+  let channels = socketChannels.get(ws);
+  if (!channels) {
+    channels = new Set();
+    socketChannels.set(ws, channels);
   }
-  socketChannels.get(ws)!.add(channelId);
+  channels.add(channelId);
 }
 
 /**
@@ -90,21 +83,14 @@ async function handleMessage(
   ws: WebSocket,
   data: string,
   user: WsUser,
-  pocketbaseUrl: string,
-  token: string,
+  supabase: SupabaseClient<Database>,
 ): Promise<void> {
   try {
     const clientMessage: ClientMessage = JSON.parse(data);
 
     switch (clientMessage.type) {
       case 'message:send':
-        await handleMessageSend(
-          ws,
-          clientMessage.payload,
-          user,
-          pocketbaseUrl,
-          token,
-        );
+        await handleMessageSend(ws, clientMessage.payload, user, supabase);
         break;
 
       case 'typing:start':
@@ -138,8 +124,7 @@ async function handleMessageSend(
   ws: WebSocket,
   payload: MessageSendPayload,
   user: WsUser,
-  pocketbaseUrl: string,
-  token: string,
+  supabase: SupabaseClient<Database>,
 ): Promise<void> {
   try {
     const { channelId, content } = payload;
@@ -159,37 +144,37 @@ async function handleMessageSend(
       return;
     }
 
-    // Create an authenticated PocketBase instance for this operation
-    const pb = new PocketBase(pocketbaseUrl);
-    pb.authStore.save(token, null);
-
-    // Create message in PocketBase
-    const message = await pb.collection('messages').create(
-      {
+    // Create message in Supabase
+    // messages.sender_id references auth.users, not public.profiles — no direct FK to profiles,
+    // so we fetch the profile separately rather than using an embedded join.
+    const { data: message, error } = await supabase
+      .from('messages')
+      .insert({
         content: content.trim(),
-        channel: channelId,
-        sender: user.id,
+        channel_id: channelId,
+        sender_id: user.id,
         type: 'text',
-      },
-      {
-        expand: 'sender', // Expand sender to get full user data
-      },
-    );
+      })
+      .select('*')
+      .single();
 
-    // Extract sender data from expanded record
-    const messageRecord = message as unknown as Record<string, unknown>;
-    const expandedSender = messageRecord.expand as
-      | Record<string, unknown>
-      | undefined;
-    const senderRecord = expandedSender?.sender as
-      | Record<string, unknown>
-      | undefined;
+    if (error) {
+      console.error('[message:send] Database error:', error);
+      return;
+    }
 
-    const senderData = senderRecord
+    // Fetch sender profile separately
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('id, username, avatar')
+      .eq('id', user.id)
+      .single();
+
+    const senderData = profile
       ? {
-          id: senderRecord.id as string,
-          username: senderRecord.username as string,
-          avatar: senderRecord.avatar as string | undefined,
+          id: profile.id,
+          username: profile.username || user.username,
+          avatar: profile.avatar ?? undefined,
         }
       : {
           id: user.id,
@@ -203,16 +188,12 @@ async function handleMessageSend(
       payload: {
         message: {
           id: message.id,
-          content: message.content as string,
+          content: message.content,
           channel: channelId,
-          sender: {
-            id: senderData.id,
-            username: senderData.username,
-            avatar: senderData.avatar,
-          },
+          sender: senderData,
           type: 'text',
-          created: message.created,
-          updated: message.updated,
+          created_at: message.created_at,
+          updated_at: message.updated_at,
         },
       },
     };
@@ -243,12 +224,11 @@ function handleTypingStart(
     }
 
     // Get or create typing users set for this channel
-    if (!typingUsers.has(channelId)) {
-      typingUsers.set(channelId, new Set());
+    let typing = typingUsers.get(channelId);
+    if (!typing) {
+      typing = new Set();
+      typingUsers.set(channelId, typing);
     }
-
-    const typing = typingUsers.get(channelId);
-    if (!typing) return;
     typing.add(user.username);
 
     // Clear any existing timeout for this user in this channel
@@ -361,12 +341,11 @@ function handleChannelJoin(
     joinRoom(ws, channelId);
 
     // Add user to online users for this channel
-    if (!onlineUsers.has(channelId)) {
-      onlineUsers.set(channelId, new Set());
+    let online = onlineUsers.get(channelId);
+    if (!online) {
+      online = new Set();
+      onlineUsers.set(channelId, online);
     }
-
-    const online = onlineUsers.get(channelId);
-    if (!online) return;
     online.add(user.id);
 
     // Emit presence update to all users in the channel
@@ -506,9 +485,8 @@ function handleDisconnect(ws: WebSocket, user: WsUser): void {
       socketChannels.delete(ws);
     }
 
-    // Clean up user and token tracking
+    // Clean up user tracking
     socketUsers.delete(ws);
-    socketTokens.delete(ws);
   } catch (err) {
     console.error('[disconnect] Error:', err);
   }
@@ -520,19 +498,17 @@ function handleDisconnect(ws: WebSocket, user: WsUser): void {
 export function handleWebSocketConnection(
   socket: WebSocket,
   user: WsUser,
-  pocketbaseUrl: string,
-  token: string,
+  supabase: SupabaseClient<Database>,
 ): void {
   console.log(`[WebSocket] User connected: ${user.username}`);
 
-  // Track user and token for this socket
+  // Track user for this socket
   socketUsers.set(socket, user);
-  socketTokens.set(socket, token);
   socketChannels.set(socket, new Set());
 
   // Handle incoming messages
   socket.on('message', (data: Buffer) => {
-    handleMessage(socket, data.toString(), user, pocketbaseUrl, token);
+    handleMessage(socket, data.toString(), user, supabase);
   });
 
   // Handle disconnection

@@ -1,11 +1,28 @@
-import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type {
-  User,
-  RegisterRequest,
-  RegisterResponse,
-  LoginRequest,
-  LoginResponse,
-} from '@chat/shared';
+import { FastifyInstance, FastifyRequest } from 'fastify';
+import { createClient } from '@supabase/supabase-js';
+import type { RegisterRequest, LoginRequest } from '@chat/shared';
+
+function requireUser(request: FastifyRequest) {
+  if (!request.user)
+    throw new Error('Unauthenticated request reached route handler');
+  return request.user;
+}
+
+// Create anon-key client for session creation
+let supabaseAnonInstance: ReturnType<typeof createClient> | null = null;
+
+function getSupabaseAnon() {
+  if (!supabaseAnonInstance) {
+    const anonKey = process.env.SUPABASE_PUBLISHABLE;
+    if (!anonKey) throw new Error('SUPABASE_PUBLISHABLE is required');
+    supabaseAnonInstance = createClient(
+      process.env.SUPABASE_URL || 'http://localhost:54321',
+      anonKey,
+      { auth: { persistSession: false } },
+    );
+  }
+  return supabaseAnonInstance;
+}
 
 /**
  * Authentication routes
@@ -18,7 +35,7 @@ export default async function (fastify: FastifyInstance) {
    * POST /api/auth/register
    * Register a new user with email and password
    */
-  fastify.post<{ Body: RegisterBody }>(
+  fastify.post<{ Body: RegisterRequest }>(
     '/register',
     {
       schema: {
@@ -27,7 +44,7 @@ export default async function (fastify: FastifyInstance) {
           properties: {
             email: { type: 'string', format: 'email' },
             password: { type: 'string', minLength: 8 },
-            username: { type: 'string' },
+            username: { type: 'string', minLength: 1 },
           },
           required: ['email', 'password', 'username'],
         },
@@ -35,115 +52,66 @@ export default async function (fastify: FastifyInstance) {
           201: {
             type: 'object',
             properties: {
-              user: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  email: { type: 'string' },
-                  username: { type: 'string' },
-                  createdAt: { type: 'string' },
-                },
-              },
+              user: { $ref: 'user#' },
               token: { type: 'string' },
             },
           },
-          400: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
+          400: { $ref: 'error#' },
         },
       },
     },
-    async (
-      request: FastifyRequest<{ Body: RegisterBody }>,
-      reply: FastifyReply,
-    ) => {
-      try {
-        const { email, password, username } = request.body;
+    async (request: FastifyRequest<{ Body: RegisterRequest }>, reply) => {
+      const { email, password, username } = request.body;
 
-        // Validate inputs
-        if (!email || !email.includes('@')) {
-          reply.code(400).send({
-            error: 'Validation Error',
-            message: 'Invalid email format',
-          });
-          return;
-        }
-
-        if (!password || password.length < 8) {
-          reply.code(400).send({
-            error: 'Validation Error',
-            message: 'Password must be at least 8 characters',
-          });
-          return;
-        }
-
-        if (!username || username.trim().length === 0) {
-          reply.code(400).send({
-            error: 'Validation Error',
-            message: 'Username is required',
-          });
-          return;
-        }
-
-        // Create user in PocketBase
-        const pb = fastify.pb;
-        const userData = {
+      // Create user with admin client
+      const { data: userData, error: createError } =
+        await fastify.supabaseAdmin.auth.admin.createUser({
           email: email.toLowerCase(),
           password,
-          passwordConfirm: password,
-          username: username.trim(),
-        };
-
-        const user = await pb.collection('users').create(userData);
-
-        // Authenticate the newly created user
-        const authData = await pb
-          .collection('users')
-          .authWithPassword(email.toLowerCase(), password);
-
-        const response: RegisterResponse = {
-          user: {
-            id: authData.record.id,
-            email: authData.record.email,
-            username: authData.record.username,
-            avatar: authData.record.avatar || undefined,
-            createdAt: authData.record.created,
-            updated: authData.record.updated,
+          email_confirm: true,
+          user_metadata: {
+            username: username.trim(),
+            name: username.trim(),
           },
-          token: authData.token,
-        };
-
-        reply.code(201).send(response);
-      } catch (err: any) {
-        fastify.log.error({ err }, 'Register error');
-
-        // Handle duplicate email error from PocketBase
-        if (err.status === 400 && err.data?.data?.email) {
-          reply.code(400).send({
-            error: 'Validation Error',
-            message: 'Email already exists',
-          });
-          return;
-        }
-
-        // Generic validation error
-        if (err.status === 400) {
-          reply.code(400).send({
-            error: 'Validation Error',
-            message: err.message || 'Invalid registration data',
-          });
-          return;
-        }
-
-        reply.code(500).send({
-          error: 'Internal Server Error',
-          message: 'Failed to register user',
         });
+
+      if (createError) {
+        fastify.log.error({ error: createError }, 'User creation failed');
+        throw fastify.httpErrors.badRequest(
+          createError.message || 'User creation failed',
+        );
       }
+
+      // Sign in to get session token
+      const supabaseAnon = getSupabaseAnon();
+      const { data: signInData, error: signInError } =
+        await supabaseAnon.auth.signInWithPassword({
+          email: email.toLowerCase(),
+          password,
+        });
+
+      if (signInError || !signInData.session) {
+        fastify.log.error(
+          { error: signInError },
+          'Sign in failed after registration',
+        );
+        throw fastify.httpErrors.internalServerError('Sign in failed');
+      }
+
+      reply.code(201);
+      return {
+        user: {
+          id: userData.user.id,
+          email: userData.user.email || '',
+          username:
+            (userData.user.user_metadata?.username as string) ||
+            username.trim(),
+          avatar: '',
+          created_at: userData.user.created_at,
+          updated_at: userData.user.updated_at || userData.user.created_at,
+        },
+        token: signInData.session.access_token,
+      };
     },
   );
 
@@ -151,7 +119,7 @@ export default async function (fastify: FastifyInstance) {
    * POST /api/auth/login
    * Authenticate user with email and password
    */
-  fastify.post<{ Body: LoginBody }>(
+  fastify.post<{ Body: LoginRequest }>(
     '/login',
     {
       schema: {
@@ -159,7 +127,7 @@ export default async function (fastify: FastifyInstance) {
           type: 'object',
           properties: {
             email: { type: 'string', format: 'email' },
-            password: { type: 'string' },
+            password: { type: 'string', minLength: 1 },
           },
           required: ['email', 'password'],
         },
@@ -167,80 +135,42 @@ export default async function (fastify: FastifyInstance) {
           200: {
             type: 'object',
             properties: {
-              user: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  email: { type: 'string' },
-                  username: { type: 'string' },
-                  createdAt: { type: 'string' },
-                },
-              },
+              user: { $ref: 'user#' },
               token: { type: 'string' },
             },
           },
-          401: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
+          401: { $ref: 'error#' },
         },
       },
     },
-    async (
-      request: FastifyRequest<{ Body: LoginBody }>,
-      reply: FastifyReply,
-    ) => {
-      try {
-        const { email, password } = request.body;
+    async (request: FastifyRequest<{ Body: LoginRequest }>, reply) => {
+      const { email, password } = request.body;
 
-        // Validate inputs
-        if (!email || !password) {
-          reply.code(401).send({
-            error: 'Unauthorized',
-            message: 'Invalid email or password',
-          });
-          return;
-        }
+      // Authenticate with Supabase
+      const supabaseAnon = getSupabaseAnon();
+      const { data, error } = await supabaseAnon.auth.signInWithPassword({
+        email: email.toLowerCase(),
+        password,
+      });
 
-        // Authenticate with PocketBase
-        const pb = fastify.pb;
-        const authData = await pb
-          .collection('users')
-          .authWithPassword(email.toLowerCase(), password);
-
-        const response: LoginResponse = {
-          user: {
-            id: authData.record.id,
-            email: authData.record.email,
-            username: authData.record.username,
-            avatar: authData.record.avatar || undefined,
-            createdAt: authData.record.created,
-            updated: authData.record.updated,
-          },
-          token: authData.token,
-        };
-
-        reply.code(200).send(response);
-      } catch (err: any) {
-        fastify.log.error({ err }, 'Login error');
-
-        // PocketBase returns 400 for invalid credentials
-        if (err.status === 400 || err.status === 401) {
-          reply.code(401).send({
-            error: 'Unauthorized',
-            message: 'Invalid email or password',
-          });
-          return;
-        }
-
-        reply.code(500).send({
-          error: 'Internal Server Error',
-          message: 'Failed to authenticate',
-        });
+      if (error || !data.session || !data.user) {
+        throw reply.unauthorized('Invalid email or password');
       }
+
+      return {
+        user: {
+          id: data.user.id,
+          email: data.user.email || '',
+          username:
+            (data.user.user_metadata?.username as string) ||
+            data.user.email?.split('@')[0] ||
+            '',
+          avatar: (data.user.user_metadata?.avatar as string) || '',
+          created_at: data.user.created_at,
+          updated_at: data.user.updated_at || data.user.created_at,
+        },
+        token: data.session.access_token,
+      };
     },
   );
 
@@ -251,52 +181,40 @@ export default async function (fastify: FastifyInstance) {
   fastify.get(
     '/me',
     {
+      preHandler: [fastify.authenticate],
       schema: {
         response: {
-          200: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              email: { type: 'string' },
-              username: { type: 'string' },
-              createdAt: { type: 'string' },
-            },
-          },
-          401: {
-            type: 'object',
-            properties: {
-              error: { type: 'string' },
-              message: { type: 'string' },
-            },
-          },
+          200: { $ref: 'user#' },
+          401: { $ref: 'error#' },
         },
       },
     },
-    async (request: FastifyRequest, reply: FastifyReply) => {
-      try {
-        // User is attached by auth middleware
-        if (!request.user) {
-          reply.code(401).send({
-            error: 'Unauthorized',
-            message: 'No user context',
-          });
-          return;
-        }
+    async (request: FastifyRequest) => {
+      const user = requireUser(request);
 
-        reply.code(200).send({
-          id: request.user.id,
-          email: request.user.email,
-          username: request.user.username,
-          avatar: request.user.avatar,
-          createdAt: request.user.createdAt,
-        });
-      } catch (err: any) {
-        fastify.log.error({ err }, 'Get user error');
-        reply.code(500).send({
-          error: 'Internal Server Error',
-          message: 'Failed to fetch user',
-        });
+      // Fetch profile from Supabase
+      const { data: profile, error } = await fastify.supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          throw fastify.httpErrors.notFound('Profile not found');
+        }
+        fastify.log.error(error);
+        throw fastify.httpErrors.internalServerError('Failed to fetch profile');
       }
+
+      return {
+        id: profile.id,
+        email: user.email,
+        username: profile.username || '',
+        avatar: profile.avatar || '',
+        created_at: profile.created_at,
+        updated_at: profile.updated_at,
+      };
     },
   );
 }

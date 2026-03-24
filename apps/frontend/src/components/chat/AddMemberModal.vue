@@ -1,0 +1,99 @@
+<script setup lang="ts">
+import { ref, watch } from 'vue';
+import { useChannelStore } from '../../stores/channelStore';
+
+interface Props {
+  modelValue: boolean;
+  groupId: string;
+}
+
+const props = defineProps<Props>();
+
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean];
+  added: [];
+}>();
+
+const channelStore = useChannelStore();
+
+const userId = ref('');
+const loading = ref(false);
+const error = ref<string | null>(null);
+
+// Reset form when modal opens
+watch(
+  () => props.modelValue,
+  (isOpen) => {
+    if (isOpen) {
+      userId.value = '';
+      error.value = null;
+    }
+  },
+);
+
+function close() {
+  emit('update:modelValue', false);
+}
+
+async function handleSubmit() {
+  if (!userId.value.trim()) {
+    error.value = 'User ID is required';
+    return;
+  }
+
+  loading.value = true;
+  error.value = null;
+
+  try {
+    await channelStore.addMember(props.groupId, userId.value.trim());
+    emit('added');
+    close();
+  } catch (err) {
+    error.value = err instanceof Error ? err.message : 'Failed to add member';
+  } finally {
+    loading.value = false;
+  }
+}
+</script>
+
+<template>
+  <dialog class="modal" :class="{ 'modal-open': modelValue }">
+    <div class="modal-box">
+      <h3 class="font-bold text-lg">Add Member to Group</h3>
+      <form @submit.prevent="handleSubmit">
+        <div class="form-control w-full mt-4">
+          <label class="label">
+            <span class="label-text">User ID</span>
+          </label>
+          <input
+            v-model="userId"
+            type="text"
+            placeholder="Enter user ID"
+            class="input input-bordered w-full"
+            required
+          />
+          <label class="label">
+            <span class="label-text-alt text-base-content/60"
+              >Enter the ID of the user you want to add</span
+            >
+          </label>
+        </div>
+
+        <div v-if="error" class="alert alert-error mt-4">
+          <span>{{ error }}</span>
+        </div>
+
+        <div class="modal-action">
+          <button type="button" class="btn" @click="close">Cancel</button>
+          <button type="submit" class="btn btn-primary" :disabled="loading">
+            <span v-if="loading" class="loading loading-spinner"></span>
+            Add Member
+          </button>
+        </div>
+      </form>
+    </div>
+    <form method="dialog" class="modal-backdrop" @click="close">
+      <button type="button">close</button>
+    </form>
+  </dialog>
+</template>

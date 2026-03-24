@@ -27,13 +27,12 @@
 | **Frontend**              | Vue 3 (Composition API) + TypeScript        | Reactive, composable architecture; first-class TS support; lightweight runtime                                                                                                                     |
 | **UI Framework**          | DaisyUI (Tailwind CSS)                      | Pre-built accessible components on top of Tailwind; chat-friendly UI primitives; easy theming                                                                                                      |
 | **Backend**               | Fastify + TypeScript                        | High-performance HTTP framework; first-class plugin system; schema-based validation; excellent TS DX                                                                                               |
-| **Database**              | PocketBase (SQLite)                         | Single-binary deploy; built-in auth, realtime SSE, file storage; zero-config for MVP                                                                                                               |
+| **Database**              | Supabase (PostgreSQL)                       | Managed Postgres with built-in auth, row-level security, real-time, and storage; local dev via Supabase CLI + Docker                                                                               |
 | **Real-time (ephemeral)** | @fastify/websocket (native WebSocket)       | Bi-directional WebSocket transport for typing indicators, presence, instant message relay; JSON messages with discriminated unions                                                                 |
-| **Real-time (data sync)** | PocketBase Realtime (SSE)                   | Server-Sent Events for authoritative data change subscriptions; keeps client stores in sync                                                                                                        |
 | **Push Notifications**    | `web-push` (W3C Web Push API + VAPID)       | Zero infrastructure cost; direct push to browser endpoints via standard Web Push Protocol; VAPID authentication; simple ~50 lines of integration; scales to Azure Notification Hub later if needed |
 | **PWA Tooling**           | vite-plugin-pwa (`injectManifest` strategy) | Full control over service worker; Workbox precaching + custom push handler                                                                                                                         |
 | **Monorepo**              | Nx + pnpm workspaces                        | Task orchestration, caching, dependency graph, code generation; pnpm for fast, disk-efficient installs                                                                                             |
-| **Auth**                  | PocketBase email/password                   | Built-in auth collection with JWT tokens; no external IdP needed for MVP                                                                                                                           |
+| **Auth**                  | Supabase Auth (email/password)              | Built-in email/password auth with JWT tokens; service role key for server-side admin operations; frontend uses anon key only for auth                                                              |
 
 ---
 
@@ -61,8 +60,10 @@ chat/
 │   │       │   └── usePush.ts               # Push notification subscription
 │   │       ├── stores/
 │   │       │   ├── chatStore.ts             # Messages, typing indicators
-│   │       │   ├── authStore.ts             # User session
-│   │       │   └── channelStore.ts          # Groups & channels
+│   │       │   ├── authStore.ts             # User session (Supabase auth only)
+│   │       │   └── channelStore.ts          # Groups & channels (via Fastify REST)
+│   │       ├── lib/
+│   │       │   └── supabase.ts              # Supabase anon client (auth only)
 │   │       ├── router/
 │   │       │   └── index.ts                 # Vue Router with auth guards
 │   │       ├── service-worker.ts            # Custom SW (injectManifest)
@@ -72,17 +73,18 @@ chat/
 │       └── src/
 │           ├── plugins/
 │           │   ├── socket.ts               # @fastify/websocket plugin (WS route at /ws)
-│           │   ├── pocketbase.ts           # PocketBase client plugin
-│           │   ├── auth.ts                 # JWT/session auth plugin
+│           │   ├── supabase.ts             # Supabase service role client plugin
+│           │   ├── auth.ts                 # Auth plugin (supabase.auth.getUser)
 │           │   └── push.ts                 # web-push VAPID configuration
 │           ├── routes/
 │           │   ├── channels.ts             # Channel CRUD
 │           │   ├── groups.ts               # Group CRUD
-│           │   ├── messages.ts             # Message history
-│           │   ├── auth.ts                 # Login/register proxy
+│           │   ├── auth.ts                 # Login/register endpoints
 │           │   └── push.ts                 # Push subscription management
 │           ├── handlers/
 │           │   └── chat.ts                 # WebSocket message handlers (room management)
+│           ├── supabase/
+│           │   └── migrations/             # SQL migrations applied via supabase db reset
 │           └── app.ts
 │
 ├── libs/
@@ -91,14 +93,9 @@ chat/
 │           ├── types/
 │           │   ├── message.ts
 │           │   ├── channel.ts
-│           │   ├── group.ts
-│           │   ├── user.ts
+│           │   ├── auth.ts
 │           │   └── events.ts              # WebSocket message contracts (discriminated unions)
 │           └── index.ts
-│
-├── pocketbase/                    # PocketBase binary + data
-│   ├── pb_data/
-│   └── pb_migrations/
 │
 └── docs/
     └── ARCHITECTURE.md            # ← You are here
@@ -108,92 +105,133 @@ chat/
 
 ## 3. Data Model
 
-### 3.1 Collections
+### 3.1 Tables
 
-| Collection | Type          | Description                                    |
-| ---------- | ------------- | ---------------------------------------------- |
-| `users`    | Built-in auth | PocketBase auth collection with email/password |
-| `groups`   | Custom        | Slack-style workspace/team container           |
-| `channels` | Custom        | Conversation channel within a group            |
-| `messages` | Custom        | Individual chat messages                       |
+| Table           | Description                                                  |
+| --------------- | ------------------------------------------------------------ |
+| `auth.users`    | Supabase managed auth table (email, password hash, metadata) |
+| `profiles`      | Public user profile (extends `auth.users` via FK)            |
+| `groups`        | Slack-style workspace/team container                         |
+| `group_members` | Junction table linking users to groups (many-to-many)        |
+| `channels`      | Conversation channel within a group                          |
+| `messages`      | Individual chat messages                                     |
 
 ### 3.2 Schema Detail
 
 ```
-users (built-in auth collection)
-├── email        (string, unique, required)
-├── username     (string, unique, required)
-├── avatar       (file)
-└── push_subscriptions (json) — array of Web Push subscription objects
+auth.users (Supabase managed)
+├── id           (uuid, PK)
+├── email        (string, unique)
+└── user_metadata (json) — stores username, name, avatar
+
+profiles (auto-created by trigger on auth.users insert)
+├── id           (uuid, PK, FK → auth.users.id CASCADE)
+├── username     (text, unique)
+├── name         (text)
+├── avatar       (text)
+├── created_at   (timestamptz)
+└── updated_at   (timestamptz)
 
 groups
-├── name         (string, required)
-├── description  (string)
-├── owner        (relation → users, single)
-└── members      (relation → users, multiple)
+├── id           (uuid, PK)
+├── name         (text, required)
+├── description  (text)
+├── owner_id     (uuid, FK → auth.users SET NULL)
+├── created_at   (timestamptz)
+└── updated_at   (timestamptz)
+
+group_members
+├── group_id     (uuid, FK → groups CASCADE, PK)
+└── user_id      (uuid, FK → auth.users CASCADE, PK)
 
 channels
-├── name         (string, e.g. "general")
-├── group        (relation → groups, single, required)
-├── description  (string)
-└── is_default   (bool, default: false)
+├── id           (uuid, PK)
+├── name         (text, required)
+├── group_id     (uuid, FK → groups CASCADE)
+├── description  (text)
+├── is_default   (bool, default false)
+├── created_at   (timestamptz)
+└── updated_at   (timestamptz)
 
 messages
-├── content      (string, required)
-├── channel      (relation → channels, single, required)
-├── sender       (relation → users, single, required)
-└── type         (select: text | system)
+├── id           (uuid, PK)
+├── content      (text, required)
+├── channel_id   (uuid, FK → channels CASCADE)
+├── sender_id    (uuid, FK → auth.users CASCADE)
+├── type         (text: 'text' | 'system')
+├── created_at   (timestamptz)
+└── updated_at   (timestamptz)
 ```
 
 ### 3.3 ER Diagram
 
 ```mermaid
 erDiagram
-    users {
-        string id PK
+    auth_users {
+        uuid id PK
         string email UK
+        json user_metadata
+    }
+
+    profiles {
+        uuid id PK
         string username UK
-        file avatar
-        json push_subscriptions
+        string name
+        string avatar
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     groups {
-        string id PK
+        uuid id PK
         string name
         string description
-        string owner FK
+        uuid owner_id FK
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    group_members {
+        uuid group_id PK
+        uuid user_id PK
     }
 
     channels {
-        string id PK
+        uuid id PK
         string name
         string description
-        string group FK
+        uuid group_id FK
         bool is_default
+        timestamptz created_at
+        timestamptz updated_at
     }
 
     messages {
-        string id PK
+        uuid id PK
         string content
-        string channel FK
-        string sender FK
-        string type "text | system"
-        datetime created
+        uuid channel_id FK
+        uuid sender_id FK
+        string type
+        timestamptz created_at
+        timestamptz updated_at
     }
 
-    users ||--o{ groups : "owns"
-    users }o--o{ groups : "member of"
+    auth_users ||--|| profiles : "has profile"
+    auth_users ||--o{ groups : "owns"
+    auth_users }o--o{ group_members : "member via"
+    group_members }o--|| groups : "belongs to"
     groups ||--o{ channels : "contains"
     channels ||--o{ messages : "has"
-    users ||--o{ messages : "sends"
+    auth_users ||--o{ messages : "sends"
 ```
 
 ### 3.4 Key Relationships
 
-- A **User** owns zero or more **Groups** and is a member of zero or more **Groups**.
-- A **Group** contains one or more **Channels** (always at least a default `#general`).
+- A **User** owns zero or more **Groups** and joins them via the **group_members** junction table.
+- A **Group** contains one or more **Channels** (always at least a default `#general`, auto-created on group creation).
 - A **Channel** contains zero or more **Messages**.
 - A **Message** belongs to exactly one **Channel** and one **User** (sender).
+- A **Profile** is auto-created by a PostgreSQL trigger on `auth.users` insert.
 
 ---
 
@@ -273,19 +311,16 @@ sequenceDiagram
     participant U as User (Vue App)
     participant WS as WebSocket /ws
     participant F as Fastify Backend
-    participant PB as PocketBase
-    participant SSE as PB Realtime (SSE)
+    participant SB as Supabase (PostgreSQL)
     participant O as Other Clients
     participant SW as Service Worker
 
     U->>WS: JSON {type: "message:send", payload: {channelId, content}}
     WS->>F: Message handler
-    F->>PB: POST /api/collections/messages/records
-    PB-->>F: Created message record
+    F->>SB: INSERT INTO messages (content, channel_id, sender_id, type)
+    SB-->>F: Created message row (with sender profile join)
     F->>WS: Broadcast to channel room (Map of Sets)
     WS-->>O: JSON {type: "message:new", payload: {message}}
-    PB->>SSE: Realtime change event
-    SSE-->>O: messages collection subscription update
 
     Note over F: If recipient offline →
     F->>SW: web-push.sendNotification() via Web Push Protocol
@@ -372,15 +407,16 @@ sequenceDiagram
 
 ## 6. Authentication
 
-| Aspect           | Detail                                                                                                                      |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **Provider**     | PocketBase built-in auth collection                                                                                         |
-| **Method**       | Email + password                                                                                                            |
-| **Token**        | PocketBase JWT (stored in `authStore`)                                                                                      |
-| **Frontend**     | PocketBase JS SDK manages token refresh; Pinia `authStore` wraps state                                                      |
-| **Backend**      | Fastify auth plugin validates PocketBase JWT on HTTP routes                                                                 |
-| **WebSocket**    | JWT token sent as query parameter (`/ws?token=JWT`) and validated via Fastify `preValidation` hook during WebSocket upgrade |
-| **Route Guards** | Vue Router `beforeEach` guard redirects unauthenticated users to `/login`                                                   |
+| Aspect           | Detail                                                                                                                             |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Provider**     | Supabase Auth (email/password)                                                                                                     |
+| **Method**       | Email + password                                                                                                                   |
+| **Token**        | Supabase JWT (`session.access_token`) stored in Pinia `authStore`                                                                  |
+| **Frontend**     | Supabase JS SDK (`signUp`, `signInWithPassword`, `signOut`, `getSession`, `onAuthStateChange`) — used **only for auth**            |
+| **Backend**      | `supabase.auth.getUser(token)` called on every authenticated request; no manual JWT parsing                                        |
+| **WebSocket**    | JWT token sent as query parameter (`/ws?token=JWT`) and validated via `supabase.auth.getUser(token)` during WebSocket upgrade      |
+| **Route Guards** | Vue Router `beforeEach` guard redirects unauthenticated users to `/login`                                                          |
+| **Data access**  | All data operations (groups, channels, messages) go through the Fastify REST API — the frontend never queries Supabase DB directly |
 
 ---
 
@@ -406,12 +442,12 @@ sequenceDiagram
     U->>SW: pushManager.subscribe(VAPID_PUBLIC_KEY)
     SW-->>U: PushSubscription object
     U->>F: POST /api/push/subscribe { subscription }
-    F->>PB: Store PushSubscription in user.push_subscriptions
-    PB-->>F: OK
+    F->>SB: Store PushSubscription in profiles (or push_subscriptions table)
+    SB-->>F: OK
 
     Note over F: Later — message arrives, user offline
-    F->>PB: Query channel members' push_subscriptions
-    PB-->>F: PushSubscription[] for offline users
+    F->>SB: Query channel members' push subscriptions
+    SB-->>F: PushSubscription[] for offline users
     F->>PS: webpush.sendNotification(subscription, payload)
     PS-->>SW: Push event
     SW->>SW: self.addEventListener("push", ...)
@@ -427,9 +463,9 @@ sequenceDiagram
 1. User grants notification permission
 2. Service worker calls pushManager.subscribe(VAPID_PUBLIC_KEY)
 3. Frontend sends PushSubscription to Fastify backend
-4. Backend stores PushSubscription object in PocketBase (user's push_subscriptions field)
+4. Backend stores PushSubscription object in Supabase (profiles or a push_subscriptions table)
 5. When message arrives + recipient NOT connected via WebSocket:
-   → Fastify queries PocketBase for channel members' subscriptions
+   → Fastify queries Supabase for channel members' subscriptions
    → Filters out users with active WebSocket connections
    → Calls webpush.sendNotification(subscription, payload) for each remaining
    → Push service (FCM/Mozilla) delivers to browser
@@ -445,7 +481,7 @@ The backend determines whether to send a push notification by checking if the re
 2. Filter out users who currently have an active WebSocket connection in the channel room
 3. For each remaining offline user, retrieve their stored `PushSubscription` objects
 4. Call `webpush.sendNotification(subscription, payload)` for each subscription
-5. Handle 410 (Gone) responses by removing expired subscriptions from PocketBase
+5. Handle 410 (Gone) responses by removing expired subscriptions from Supabase
 
 ---
 
@@ -555,15 +591,15 @@ gantt
 
 ### 9.2 Phase Detail
 
-#### Phase 1 — Foundation (MVP)
+| Phase 1 — Foundation (MVP)
 
-| Task       | Description                                                                        |
-| ---------- | ---------------------------------------------------------------------------------- |
-| Scaffold   | Nx generators for Vue 3 app, Fastify app, shared TypeScript library                |
-| PocketBase | Download binary, configure collections (`users`, `groups`, `channels`, `messages`) |
-| Auth       | Email/password registration and login via PocketBase SDK; Pinia auth store         |
-| Chat       | Single hardcoded "general" channel; send and receive messages via WebSocket        |
-| UI         | DaisyUI `chat` component; responsive layout with message bubbles and input         |
+| Task     | Description                                                                   |
+| -------- | ----------------------------------------------------------------------------- |
+| Scaffold | Nx generators for Vue 3 app, Fastify app, shared TypeScript library           |
+| Supabase | Start local Supabase CLI stack; apply migrations (`supabase db reset`)        |
+| Auth     | Email/password registration and login via Supabase Auth SDK; Pinia auth store |
+| Chat     | Single hardcoded "general" channel; send and receive messages via WebSocket   |
+| UI       | DaisyUI `chat` component; responsive layout with message bubbles and input    |
 
 **Exit Criteria**: User can register, log in, send a message, and see it appear in real time.
 
@@ -607,7 +643,7 @@ gantt
 
 | Task           | Description                                                              |
 | -------------- | ------------------------------------------------------------------------ |
-| Search         | Full-text message search (PocketBase filter or SQLite FTS5)              |
+| Search         | Full-text message search (PostgreSQL `tsvector` / `ilike`)               |
 | Avatars        | Upload, display, fallback to initials                                    |
 | Error handling | Reconnection UI; toast notifications for errors; retry logic             |
 | Accessibility  | ARIA labels, keyboard navigation, screen reader testing                  |
@@ -635,7 +671,7 @@ gantt
 
 ```
 Single Server
-├── PocketBase (SQLite, single binary)
+├── Supabase (PostgreSQL, local or cloud)
 ├── Fastify + @fastify/websocket (single process)
 └── Suitable for: ~100-200 concurrent users
 ```
@@ -644,9 +680,9 @@ Single Server
 
 ```mermaid
 graph TD
-    A["<b>Current</b><br/>PocketBase (SQLite)<br/>Single Fastify + @fastify/websocket<br/>~200 DAU"] -->|"~200-500 DAU<br/>heavy chat load"| B
+    A["<b>Current</b><br/>Supabase (PostgreSQL)<br/>Single Fastify + @fastify/websocket<br/>~200 DAU"] -->|"~200-500 DAU<br/>heavy chat load"| B
 
-    B["<b>Option A</b><br/>PocketBase PostgreSQL fork<br/>Same API, horizontal DB scaling"] -->|"10K+ concurrent"| D
+    B["<b>Option A</b><br/>Supabase Cloud (managed Postgres)<br/>Same API, horizontal DB scaling"] -->|"10K+ concurrent"| D
 
     A -->|"Need max control"| C
     C["<b>Option B</b><br/>Custom Fastify + Drizzle ORM<br/>+ PostgreSQL (full control)"] -->|"10K+ concurrent"| D
@@ -658,10 +694,9 @@ graph TD
 
 | Trigger                            | Action                                                   | Complexity                  |
 | ---------------------------------- | -------------------------------------------------------- | --------------------------- |
-| SQLite write contention            | Migrate to PocketBase PostgreSQL fork                    | Low — API stays the same    |
-| Need custom queries / advanced ORM | Move to Fastify + Drizzle ORM + PostgreSQL               | Medium — rewrite data layer |
-| Multiple server instances needed   | Add Redis pub/sub for cross-instance WebSocket broadcast | Medium — infra change       |
 | High DB connection count           | Add PgBouncer for connection pooling                     | Low — infra-only            |
+| Multiple server instances needed   | Add Redis pub/sub for cross-instance WebSocket broadcast | Medium — infra change       |
+| Need advanced ORM / custom queries | Add Drizzle ORM layer over the existing Supabase DB      | Medium — rewrite data layer |
 | Global distribution needed         | Add CDN for static assets; regional Fastify instances    | High — architecture change  |
 
 ### 10.4 What Stays the Same
@@ -679,37 +714,41 @@ Regardless of scaling stage, these remain constant:
 
 ### A. Environment Variables
 
-| Variable            | Description                                                                                            | Used By           |
-| ------------------- | ------------------------------------------------------------------------------------------------------ | ----------------- |
-| `POCKETBASE_URL`    | PocketBase server URL (e.g., `http://127.0.0.1:8090`)                                                  | Backend, Frontend |
-| `VAPID_PUBLIC_KEY`  | VAPID public key for browser push subscription                                                         | Frontend, Backend |
-| `VAPID_PRIVATE_KEY` | VAPID private key for web-push signing                                                                 | Backend           |
-| `VAPID_SUBJECT`     | VAPID subject (e.g., `mailto:admin@example.com`)                                                       | Backend           |
-| `VITE_WS_URL`       | WebSocket base URL (e.g., `http://localhost:3000`); frontend converts to `ws://` and connects to `/ws` | Frontend          |
-| `PORT`              | Fastify server port                                                                                    | Backend           |
+| Variable                    | Description                                                                                            | Used By           |
+| --------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------- |
+| `SUPABASE_URL`              | Supabase project URL (e.g., `http://localhost:54321`)                                                  | Backend           |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role key — bypasses RLS; never expose to browser                                               | Backend           |
+| `SUPABASE_ANON_KEY`         | Anon key — used by backend for sign-in session creation                                                | Backend           |
+| `VITE_SUPABASE_URL`         | Supabase URL exposed to Vite frontend (auth only)                                                      | Frontend          |
+| `VITE_SUPABASE_ANON_KEY`    | Anon key exposed to Vite frontend (auth only)                                                          | Frontend          |
+| `VAPID_PUBLIC_KEY`          | VAPID public key for browser push subscription                                                         | Frontend, Backend |
+| `VAPID_PRIVATE_KEY`         | VAPID private key for web-push signing                                                                 | Backend           |
+| `VAPID_SUBJECT`             | VAPID subject (e.g., `mailto:admin@example.com`)                                                       | Backend           |
+| `VITE_WS_URL`               | WebSocket base URL (e.g., `http://localhost:3000`); frontend converts to `ws://` and connects to `/ws` | Frontend          |
+| `PORT`                      | Fastify server port                                                                                    | Backend           |
 
 ### B. Key Dependencies
 
-| Package              | Version Policy | Purpose                                          |
-| -------------------- | -------------- | ------------------------------------------------ |
-| `vue`                | `^3.x`         | Frontend framework                               |
-| `pinia`              | `^2.x`         | State management                                 |
-| `vue-router`         | `^4.x`         | Client-side routing                              |
-| `@fastify/websocket` | `^11.x`        | Fastify WebSocket plugin (wraps `ws`)            |
-| _(native WebSocket)_ | —              | Browser-native WebSocket API (no client library) |
-| `pocketbase`         | `^0.x`         | PocketBase JS SDK                                |
-| `fastify`            | `^5.x`         | HTTP server                                      |
-| `web-push`           | `^3.x`         | W3C Web Push Protocol with VAPID authentication  |
-| `vite-plugin-pwa`    | `^0.x`         | PWA build integration                            |
-| `workbox-precaching` | `^7.x`         | Service worker precaching                        |
-| `daisyui`            | `^4.x`         | UI component library                             |
-| `tailwindcss`        | `^3.x`         | Utility-first CSS                                |
+| Package                 | Version Policy | Purpose                                                     |
+| ----------------------- | -------------- | ----------------------------------------------------------- |
+| `vue`                   | `^3.x`         | Frontend framework                                          |
+| `pinia`                 | `^2.x`         | State management                                            |
+| `vue-router`            | `^4.x`         | Client-side routing                                         |
+| `@fastify/websocket`    | `^11.x`        | Fastify WebSocket plugin (wraps `ws`)                       |
+| _(native WebSocket)_    | —              | Browser-native WebSocket API (no client library)            |
+| `@supabase/supabase-js` | `^2.x`         | Supabase JS SDK (auth on frontend; admin client on backend) |
+| `fastify`               | `^5.x`         | HTTP server                                                 |
+| `web-push`              | `^3.x`         | W3C Web Push Protocol with VAPID authentication             |
+| `vite-plugin-pwa`       | `^0.x`         | PWA build integration                                       |
+| `workbox-precaching`    | `^7.x`         | Service worker precaching                                   |
+| `daisyui`               | `^4.x`         | UI component library                                        |
+| `tailwindcss`           | `^3.x`         | Utility-first CSS                                           |
 
 ### C. Naming Conventions
 
 | Entity                  | Convention                      | Example                                                |
 | ----------------------- | ------------------------------- | ------------------------------------------------------ |
-| PocketBase collections  | `snake_case` (plural)           | `messages`, `push_subscriptions`                       |
+| Supabase tables         | `snake_case` (plural)           | `messages`, `group_members`, `profiles`                |
 | TypeScript types        | `PascalCase`                    | `Message`, `Channel`, `ClientMessage`, `ServerMessage` |
 | Vue components          | `PascalCase`                    | `MessageBubble.vue`, `ChatView.vue`                    |
 | Composables             | `camelCase` with `use` prefix   | `useChat`, `useAuth`                                   |
@@ -719,4 +758,4 @@ Regardless of scaling stage, these remain constant:
 
 ---
 
-_Last updated: 2026-03-19_
+_Last updated: 2026-03-24_

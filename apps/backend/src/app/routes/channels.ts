@@ -1,22 +1,422 @@
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import PocketBase from 'pocketbase';
+import { FastifyInstance, FastifyRequest } from 'fastify';
+import type { CreateChannelRequest } from '@chat/shared';
 
+function requireUser(request: FastifyRequest) {
+  if (!request.user)
+    throw new Error('Unauthenticated request reached route handler');
+  return request.user;
+}
+
+/**
+ * Channel routes (all protected)
+ * - GET / - List channels in a group
+ * - POST / - Create a new channel in a group
+ * - GET /:channelId/messages - Get paginated message history
+ * - DELETE /:channelId - Delete a channel
+ */
 export default async function (fastify: FastifyInstance) {
-  const pocketbaseUrl = process.env.POCKETBASE_URL || 'http://localhost:8090';
+  // Protect ALL channel routes with authentication
+  fastify.addHook('preHandler', fastify.authenticate);
+  /**
+   * GET /api/channels?groupId=xxx
+   * Returns all channels in a group where the user is a member
+   */
+  fastify.get<{ Querystring: { groupId: string } }>(
+    '/',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          properties: {
+            groupId: { type: 'string' },
+          },
+          required: ['groupId'],
+        },
+        response: {
+          200: {
+            type: 'array',
+            items: { $ref: 'channel#' },
+          },
+          403: { $ref: 'error#' },
+          404: { $ref: 'error#' },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Querystring: { groupId: string } }>) => {
+      const { groupId } = request.query;
+
+      // Verify user is a member of the group
+      const { data: membership } = await fastify.supabaseAdmin
+        .from('group_members')
+        .select('user_id')
+        .eq('group_id', groupId)
+        .eq('user_id', requireUser(request).id)
+        .single();
+
+      if (!membership) {
+        throw fastify.httpErrors.forbidden('Not a member of this group');
+      }
+
+      // Get all channels in the group
+      const { data: channels, error } = await fastify.supabaseAdmin
+        .from('channels')
+        .select('*')
+        .eq('group_id', groupId)
+        .order('is_default', { ascending: false })
+        .order('name', { ascending: true });
+
+      if (error) {
+        fastify.log.error(error);
+        throw fastify.httpErrors.internalServerError(
+          'Failed to fetch channels',
+        );
+      }
+
+      return channels.map((ch) => ({
+        id: ch.id,
+        name: ch.name,
+        group: ch.group_id,
+        description: ch.description || '',
+        is_default: ch.is_default,
+        created_at: ch.created_at,
+        updated_at: ch.updated_at,
+      }));
+    },
+  );
 
   /**
-   * GET /api/channels
-   * Returns all channels, with default channel listed first.
+   * POST /api/channels
+   * Create a new channel in a group
    */
-  fastify.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
-    const token = request.headers.authorization!.replace('Bearer ', '');
-    const pb = new PocketBase(pocketbaseUrl);
-    pb.authStore.save(token, null);
+  fastify.post<{ Body: CreateChannelRequest }>(
+    '/',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', minLength: 1 },
+            groupId: { type: 'string' },
+            description: { type: 'string' },
+          },
+          required: ['name', 'groupId'],
+        },
+        response: {
+          201: { $ref: 'channel#' },
+          400: { $ref: 'error#' },
+          403: { $ref: 'error#' },
+          404: { $ref: 'error#' },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Body: CreateChannelRequest }>, reply) => {
+      const { name, groupId, description } = request.body;
+      const userId = requireUser(request).id;
 
-    const channels = await pb
-      .collection('channels')
-      .getFullList({ sort: '-is_default,name' });
+      // Verify user is a member of the group
+      const { data: membership } = await fastify.supabaseAdmin
+        .from('group_members')
+        .select('user_id')
+        .eq('group_id', groupId)
+        .eq('user_id', userId)
+        .single();
 
-    return reply.send(channels);
-  });
+      if (!membership) {
+        throw fastify.httpErrors.forbidden(
+          'You must be a member of the group to create channels',
+        );
+      }
+
+      // Check if channel name already exists in this group
+      const { data: existingChannels } = await fastify.supabaseAdmin
+        .from('channels')
+        .select('id')
+        .eq('group_id', groupId)
+        .eq('name', name.trim());
+
+      if (existingChannels && existingChannels.length > 0) {
+        throw fastify.httpErrors.badRequest(
+          'A channel with this name already exists in the group',
+        );
+      }
+
+      // Create the channel
+      const { data: channel, error } = await fastify.supabaseAdmin
+        .from('channels')
+        .insert({
+          name: name.trim(),
+          group_id: groupId,
+          description: description?.trim() || '',
+          is_default: false,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        fastify.log.error(error);
+        throw fastify.httpErrors.internalServerError(
+          'Failed to create channel',
+        );
+      }
+
+      reply.code(201);
+      return {
+        id: channel.id,
+        name: channel.name,
+        group: channel.group_id,
+        description: channel.description || '',
+        is_default: channel.is_default,
+        created_at: channel.created_at,
+        updated_at: channel.updated_at,
+      };
+    },
+  );
+
+  /**
+   * GET /api/channels/:channelId/messages
+   * Get paginated message history for a channel
+   */
+  fastify.get<{
+    Params: { channelId: string };
+    Querystring: { page?: number; perPage?: number };
+  }>(
+    '/:channelId/messages',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          properties: {
+            channelId: { type: 'string' },
+          },
+          required: ['channelId'],
+        },
+        querystring: {
+          type: 'object',
+          properties: {
+            page: { type: 'integer', minimum: 1, default: 1 },
+            perPage: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              messages: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    content: { type: 'string' },
+                    channel: { type: 'string' },
+                    sender: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        username: { type: 'string' },
+                        avatar: { type: 'string' },
+                      },
+                    },
+                    type: { type: 'string', enum: ['text', 'system'] },
+                    created_at: { type: 'string' },
+                    updated_at: { type: 'string' },
+                  },
+                },
+              },
+              totalPages: { type: 'integer' },
+              page: { type: 'integer' },
+            },
+          },
+          403: { $ref: 'error#' },
+          404: { $ref: 'error#' },
+        },
+      },
+    },
+    async (
+      request: FastifyRequest<{
+        Params: { channelId: string };
+        Querystring: { page?: number; perPage?: number };
+      }>,
+    ) => {
+      const { channelId } = request.params;
+      const page = request.query.page || 1;
+      const perPage = request.query.perPage || 50;
+
+      // Get the channel and verify membership
+      const { data: channel, error: channelError } = await fastify.supabaseAdmin
+        .from('channels')
+        .select('group_id')
+        .eq('id', channelId)
+        .single();
+
+      if (channelError) {
+        if (channelError.code === 'PGRST116') {
+          throw fastify.httpErrors.notFound('Channel not found');
+        }
+        fastify.log.error(channelError);
+        throw fastify.httpErrors.internalServerError('Failed to fetch channel');
+      }
+
+      // Verify user is a member of the group
+      const { data: membership } = await fastify.supabaseAdmin
+        .from('group_members')
+        .select('user_id')
+        .eq('group_id', channel.group_id)
+        .eq('user_id', requireUser(request).id)
+        .single();
+
+      if (!membership) {
+        throw fastify.httpErrors.forbidden('Not a member of this group');
+      }
+
+      // Get paginated messages with sender profile
+      // Note: messages.sender_id → auth.users(id), not profiles(id)
+      // So we fetch messages first, then profiles in a second query
+      const from = (page - 1) * perPage;
+      const to = from + perPage - 1;
+
+      const {
+        data: messages,
+        error,
+        count,
+      } = await fastify.supabaseAdmin
+        .from('messages')
+        .select('*', { count: 'exact' })
+        .eq('channel_id', channelId)
+        .order('created_at', { ascending: true })
+        .range(from, to);
+
+      if (error) {
+        fastify.log.error(error);
+        throw fastify.httpErrors.internalServerError(
+          'Failed to fetch messages',
+        );
+      }
+
+      // Get unique sender IDs and fetch profiles
+      const senderIds = [...new Set(messages.map((msg) => msg.sender_id).filter(Boolean))] as string[];
+      
+      let senderProfiles: Record<string, { id: string; username: string; avatar: string | null }> = {};
+      
+      if (senderIds.length > 0) {
+        const { data: profiles, error: profilesError } = await fastify.supabaseAdmin
+          .from('profiles')
+          .select('id, username, name, avatar')
+          .in('id', senderIds);
+
+        if (profilesError) {
+          fastify.log.error(profilesError);
+        } else if (profiles) {
+          senderProfiles = Object.fromEntries(
+            profiles.map((p) => [p.id, p])
+          );
+        }
+      }
+
+      const totalPages = Math.ceil((count || 0) / perPage);
+
+      return {
+        messages: messages.map((msg) => {
+          const profile = msg.sender_id ? senderProfiles[msg.sender_id] : null;
+          return {
+            id: msg.id,
+            content: msg.content,
+            channel: msg.channel_id || '',
+            sender: {
+              id: msg.sender_id || '',
+              username: profile?.username || 'Unknown',
+              avatar: profile?.avatar || '',
+            },
+            type: msg.type as 'text' | 'system',
+            created_at: msg.created_at,
+            updated_at: msg.updated_at,
+          };
+        }),
+        totalPages,
+        page,
+      };
+    },
+  );
+
+  /**
+   * DELETE /api/channels/:channelId
+   * Delete a channel (cannot delete default channels)
+   */
+  fastify.delete<{ Params: { channelId: string } }>(
+    '/:channelId',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          properties: {
+            channelId: { type: 'string' },
+          },
+          required: ['channelId'],
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+            },
+          },
+          400: { $ref: 'error#' },
+          403: { $ref: 'error#' },
+          404: { $ref: 'error#' },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { channelId: string } }>) => {
+      const { channelId } = request.params;
+
+      // Get the channel
+      const { data: channel, error: channelError } = await fastify.supabaseAdmin
+        .from('channels')
+        .select('*')
+        .eq('id', channelId)
+        .single();
+
+      if (channelError) {
+        if (channelError.code === 'PGRST116') {
+          throw fastify.httpErrors.notFound('Channel not found');
+        }
+        fastify.log.error(channelError);
+        throw fastify.httpErrors.internalServerError('Failed to fetch channel');
+      }
+
+      // Cannot delete default channels
+      if (channel.is_default) {
+        throw fastify.httpErrors.badRequest(
+          'Cannot delete the default channel',
+        );
+      }
+
+      // Verify user is a member of the group
+      const { data: membership } = await fastify.supabaseAdmin
+        .from('group_members')
+        .select('user_id')
+        .eq('group_id', channel.group_id)
+        .eq('user_id', requireUser(request).id)
+        .single();
+
+      if (!membership) {
+        throw fastify.httpErrors.forbidden('Not a member of this group');
+      }
+
+      // Delete the channel
+      const { error: deleteError } = await fastify.supabaseAdmin
+        .from('channels')
+        .delete()
+        .eq('id', channelId);
+
+      if (deleteError) {
+        fastify.log.error(deleteError);
+        throw fastify.httpErrors.internalServerError(
+          'Failed to delete channel',
+        );
+      }
+
+      return { success: true };
+    },
+  );
 }

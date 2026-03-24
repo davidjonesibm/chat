@@ -1,12 +1,13 @@
 # Chat
 
-Real-time group chat PWA built with Vue 3, Fastify, @fastify/websocket, and PocketBase.
+Real-time group chat PWA built with Vue 3, Fastify, @fastify/websocket, and Supabase.
 
 ## Prerequisites
 
 - Node.js 20+
 - pnpm 10+
-- (PocketBase binary is included at `pocketbase/pocketbase`)
+- [Supabase CLI](https://supabase.com/docs/guides/cli) (`brew install supabase/tap/supabase`)
+- Docker (required for local Supabase)
 
 ## First-time setup
 
@@ -16,57 +17,45 @@ Real-time group chat PWA built with Vue 3, Fastify, @fastify/websocket, and Pock
 pnpm install
 ```
 
-### 2. Set up PocketBase (one-time)
-
-Start PocketBase and create the superuser:
+### 2. Start local Supabase
 
 ```bash
-cd pocketbase && ./pocketbase serve --http=localhost:8090
+cd apps/backend
+supabase start
 ```
 
-Open the Admin UI at **http://localhost:8090/\_/** and create your superuser account.
+This starts a local Supabase stack (Postgres, Auth, REST API, Studio) via Docker.
+Note the output — you'll need the API URL, anon key, service role key, and JWT secret.
 
-Then create these collections in the Admin UI:
+Once running, open Studio at **http://localhost:54323**.
 
-#### Collection: `groups`
+### 3. Apply migrations
 
-| Field         | Type             | Options  |
-| ------------- | ---------------- | -------- |
-| `name`        | Text             | Required |
-| `description` | Text             |          |
-| `owner`       | Relation → users | Single   |
-| `members`     | Relation → users | Multiple |
+```bash
+supabase db reset
+```
 
-Set API rules: all rules → `@request.auth.id != ""`
+This runs all migrations in `apps/backend/supabase/migrations/`, creating the `profiles`, `groups`, `group_members`, `channels`, and `messages` tables along with the `handle_new_user` trigger.
 
-#### Collection: `channels`
+### 4. Configure environment variables
 
-| Field         | Type              | Options          |
-| ------------- | ----------------- | ---------------- |
-| `name`        | Text              | Required         |
-| `group`       | Relation → groups | Single, Required |
-| `description` | Text              |                  |
-| `is_default`  | Bool              |                  |
+Create `apps/backend/.env`:
 
-Set API rules: all rules → `@request.auth.id != ""`
+```bash
+SUPABASE_URL=http://localhost:54321
+SUPABASE_SERVICE_ROLE_KEY=<service_role key from supabase start output>
+SUPABASE_ANON_KEY=<anon key from supabase start output>
+PORT=3000
+```
 
-#### Collection: `messages`
+Create `apps/frontend/.env`:
 
-| Field     | Type                | Options                   |
-| --------- | ------------------- | ------------------------- |
-| `content` | Text                | Required                  |
-| `channel` | Relation → channels | Single, Required          |
-| `sender`  | Relation → users    | Single, Required          |
-| `type`    | Select              | Options: `text`, `system` |
-
-Set API rules: all rules → `@request.auth.id != ""`
-
-### 3. Create the "general" channel
-
-In the PocketBase Admin UI:
-
-1. Create a record in `groups`: name = `General`
-2. Create a record in `channels`: name = `general`, group = (the group you just created), is_default = true
+```bash
+VITE_SUPABASE_URL=http://localhost:54321
+VITE_SUPABASE_ANON_KEY=<anon key from supabase start output>
+VITE_API_URL=http://localhost:3000
+VITE_WS_URL=http://localhost:3000
+```
 
 ## Using pnpm & Nx commands
 
@@ -94,8 +83,6 @@ pnpm nx build backend          # production build → dist/apps/backend/
 pnpm nx build frontend         # production build → dist/apps/frontend/
 pnpm nx test frontend          # run Vitest unit tests
 pnpm nx lint backend           # ESLint
-pnpm nx run pocketbase:serve   # start PocketBase server
-pnpm nx run pocketbase:migrate # run pending PocketBase migrations
 ```
 
 ### Running across the whole workspace
@@ -128,11 +115,13 @@ pnpm nx run backend:build --skip-nx-cache
 
 Each service needs its own terminal:
 
-### Terminal 1 — PocketBase
+### Terminal 1 — Supabase (local)
 
 ```bash
-cd pocketbase && ./pocketbase serve --http=localhost:8090
+cd apps/backend && supabase start
 ```
+
+Keep this running. Studio is at **http://localhost:54323**.
 
 ### Terminal 2 — Backend (Fastify + WebSocket)
 
@@ -163,21 +152,23 @@ Runs on **http://localhost:4200**
 apps/
   backend/      Fastify 5 + WebSocket API server
   frontend/     Vue 3 + Vite + DaisyUI PWA
-libs/
+lbs/
   shared/       Shared TypeScript types (@chat/shared)
-pocketbase/     PocketBase binary + data
 docs/
   ARCHITECTURE.md  Full architecture reference
 ```
 
 ## Environment
 
-Defaults work out of the box. Override via `.env` files:
+Defaults work out of the box after `supabase start`. Override via `.env` files:
 
-| File                 | Variable              | Default                 |
-| -------------------- | --------------------- | ----------------------- |
-| `apps/backend/.env`  | `POCKETBASE_URL`      | `http://localhost:8090` |
-| `apps/backend/.env`  | `PORT`                | `3000`                  |
-| `apps/frontend/.env` | `VITE_POCKETBASE_URL` | `http://localhost:8090` |
-| `apps/frontend/.env` | `VITE_API_URL`        | `http://localhost:3000` |
-| `apps/frontend/.env` | `VITE_WS_URL`         | `http://localhost:3000` |
+| File                 | Variable                    | Default                  |
+| -------------------- | --------------------------- | ------------------------ |
+| `apps/backend/.env`  | `SUPABASE_URL`              | `http://localhost:54321` |
+| `apps/backend/.env`  | `SUPABASE_SERVICE_ROLE_KEY` | _(from supabase start)_  |
+| `apps/backend/.env`  | `SUPABASE_ANON_KEY`         | _(from supabase start)_  |
+| `apps/backend/.env`  | `PORT`                      | `3000`                   |
+| `apps/frontend/.env` | `VITE_SUPABASE_URL`         | `http://localhost:54321` |
+| `apps/frontend/.env` | `VITE_SUPABASE_ANON_KEY`    | _(from supabase start)_  |
+| `apps/frontend/.env` | `VITE_API_URL`              | `http://localhost:3000`  |
+| `apps/frontend/.env` | `VITE_WS_URL`               | `http://localhost:3000`  |

@@ -1,13 +1,27 @@
-export interface Message {
+interface BaseRecord {
   id: string;
-  content: string;
-  channel: string; // channel ID
-  sender: string; // user ID
-  type: 'text' | 'system';
-  created: string;
-  updated: string;
+  created_at: string;
+  updated_at: string;
 }
 
+/**
+ * Message record from messages table
+ */
+export interface MessageRecord extends BaseRecord {
+  content: string;
+  channel: string;
+  sender: string;
+  type: 'text' | 'system';
+}
+
+export type Message = Pick<
+  MessageRecord,
+  'id' | 'content' | 'channel' | 'sender' | 'type' | 'created_at' | 'updated_at'
+>;
+
+/**
+ * Message with expanded sender data
+ */
 export interface MessageWithSender {
   id: string;
   content: string;
@@ -18,6 +32,6 @@ export interface MessageWithSender {
     avatar?: string;
   };
   type: 'text' | 'system';
-  created: string;
-  updated: string;
+  created_at: string;
+  updated_at: string;
 }

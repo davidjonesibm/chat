@@ -1,69 +1,44 @@
-/**
- * User profile from PocketBase
- */
-export interface User {
+interface BaseRecord {
   id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * User record from users table
+ */
+export interface UserRecord extends BaseRecord {
   email: string;
   username: string;
-  avatar?: string;
-  createdAt: string;
-  updated: string;
+  avatar: string;
 }
 
 /**
- * JWT token from auth endpoints
+ * User profile for API responses (subset of UserRecord)
  */
-export interface AuthToken {
-  token: string;
-}
+export type User = Pick<
+  UserRecord,
+  'id' | 'email' | 'username' | 'avatar' | 'created_at' | 'updated_at'
+>;
 
-/**
- * Request body for user registration
- */
+// Keep request/response types — these are API contracts, not PB records
 export interface RegisterRequest {
   email: string;
   password: string;
   username: string;
 }
 
-/**
- * Response from registration endpoint
- */
-export interface RegisterResponse {
+export interface AuthResponse {
   user: User;
   token: string;
 }
 
-/**
- * Request body for login
- */
+// Combine Register/Login responses since they're identical
+export type RegisterResponse = AuthResponse;
+export type LoginResponse = AuthResponse;
+
 export interface LoginRequest {
   email: string;
   password: string;
 }
 
-/**
- * Response from login endpoint
- */
-export interface LoginResponse {
-  user: User;
-  token: string;
-}
-
-/**
- * Decoded JWT token claims (PocketBase auth token format)
- */
-export interface JwtClaims {
-  id: string;
-  type: string;
-  exp: number;
-  iat: number;
-}
-
-/**
- * Request with authenticated user attached
- */
-export interface AuthenticatedRequest {
-  user: User;
-  claims: JwtClaims;
-}

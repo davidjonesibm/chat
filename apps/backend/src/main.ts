@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
+import cors from '@fastify/cors';
 import { app } from './app/app';
 import socketPlugin from './app/plugins/socket';
+import supabasePlugin from './app/plugins/supabase';
 
 const host = process.env.HOST ?? 'localhost';
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
@@ -10,35 +12,23 @@ const server = Fastify({
   logger: true,
 });
 
-// Add CORS support via hook
-server.addHook('onSend', async (request, reply) => {
-  const origin = request.headers.origin || '*';
-  const allowedOrigins = [
+// Register CORS plugin
+server.register(cors, {
+  origin: [
     'http://localhost:4200',
     'http://localhost:5173',
     'http://localhost:3000',
-  ];
-
-  if (allowedOrigins.includes(origin) || origin === '*') {
-    reply.header('Access-Control-Allow-Origin', origin);
-    reply.header('Access-Control-Allow-Credentials', 'true');
-    reply.header(
-      'Access-Control-Allow-Methods',
-      'GET, POST, PUT, DELETE, PATCH, OPTIONS',
-    );
-    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  }
-});
-
-// Handle preflight OPTIONS requests
-server.options('*', async (request, reply) => {
-  reply.send();
+  ],
+  credentials: true,
 });
 
 // Health check route
 server.get('/health', async () => {
   return { status: 'ok', timestamp: new Date().toISOString() };
 });
+
+// Register supabase first so socket-plugin's dependency is satisfied
+server.register(supabasePlugin);
 
 // Register WebSocket plugin at root level (must NOT be under /api prefix)
 server.register(socketPlugin);

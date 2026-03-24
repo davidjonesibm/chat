@@ -2,8 +2,6 @@ import fp from 'fastify-plugin';
 import websocket from '@fastify/websocket';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { WebSocket } from 'ws';
-import PocketBase from 'pocketbase';
-import { decodeJwt } from '../utils/jwt.js';
 import { handleWebSocketConnection } from '../handlers/chat.js';
 
 export default fp(
@@ -14,8 +12,6 @@ export default fp(
         maxPayload: 64 * 1024, // 64 KB
       },
     });
-
-    const pocketbaseUrl = process.env.POCKETBASE_URL || 'http://localhost:8090';
 
     // Create WebSocket route with authentication
     fastify.get(
@@ -30,30 +26,25 @@ export default fp(
               return;
             }
 
-            const claims = decodeJwt(token);
-            if (!claims) {
-              reply.code(401).send({ error: 'Invalid token' });
+            // Verify token using Supabase's built-in verification
+            const { data: { user }, error } = await fastify.supabaseAdmin.auth.getUser(token);
+            if (error || !user) {
+              reply.code(401).send({ error: 'Invalid or expired token' });
               return;
             }
 
-            if (claims.exp && claims.exp * 1000 < Date.now()) {
-              reply.code(401).send({ error: 'Token expired' });
-              return;
-            }
-
-            const pb = new PocketBase(pocketbaseUrl);
-            pb.authStore.save(token, null);
-            const user = await pb.collection('users').getOne(claims.id);
-
+            // Build user object from Supabase user data
             request.user = {
               id: user.id,
-              email: user['email'] as string,
-              username: (user['username'] ||
-                user['name'] ||
-                user['email']) as string,
-              avatar: (user['avatar'] as string) || undefined,
-              createdAt: user.created,
-              updated: user.updated,
+              email: user.email || '',
+              username:
+                (user.user_metadata?.username as string) ||
+                (user.user_metadata?.name as string) ||
+                user.email?.split('@')[0] ||
+                '',
+              avatar: (user.user_metadata?.avatar as string) || '',
+              created_at: user.created_at,
+              updated_at: user.updated_at || user.created_at,
             };
           } catch (err) {
             fastify.log.error({ err }, 'WebSocket authentication error');
@@ -67,12 +58,11 @@ export default fp(
           return;
         }
 
-        const token = (request.query as Record<string, string>)['token'];
-        handleWebSocketConnection(socket, request.user, pocketbaseUrl, token);
+        handleWebSocketConnection(socket, request.user, fastify.supabaseAdmin);
       },
     );
 
     fastify.log.info('WebSocket handlers registered at /ws');
   },
-  { name: 'socket-plugin' },
+  { name: 'socket-plugin', dependencies: ['supabase-plugin'] },
 );

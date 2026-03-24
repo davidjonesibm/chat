@@ -222,12 +222,40 @@ export function useChat() {
     }
   }
 
+  function switchChannel(
+    oldChannelId: string | null,
+    newChannelId: string,
+  ): void {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    // Leave old channel if it exists
+    if (oldChannelId) {
+      sendClientMessage({
+        type: 'channel:leave',
+        payload: {
+          channelId: oldChannelId,
+        },
+      });
+    }
+
+    // Join new channel
+    sendClientMessage({
+      type: 'channel:join',
+      payload: {
+        channelId: newChannelId,
+      },
+    });
+  }
+
   return {
     connect,
     disconnect,
     sendMessage,
     startTyping,
     stopTyping,
+    switchChannel,
     error,
   };
 }

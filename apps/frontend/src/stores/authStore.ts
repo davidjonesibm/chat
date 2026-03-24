@@ -1,7 +1,7 @@
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
 import type { User, RegisterRequest, LoginRequest } from '@chat/shared';
-import pb from '../lib/pocketbase';
+import { supabase } from '../lib/supabase';
 import router from '../router';
 
 export const useAuthStore = defineStore('auth', () => {
@@ -14,35 +14,37 @@ export const useAuthStore = defineStore('auth', () => {
   // Computed
   const isAuthenticated = computed(() => !!token.value && !!user.value);
 
-  // Helper to map PocketBase record to User type
-  const mapRecordToUser = (record: Record<string, unknown>): User => ({
-    id: record.id as string,
-    email: record.email as string,
-    username: record.username as string,
-    avatar: record.avatar as string | undefined,
-    createdAt: record.created as string,
-    updated: record.updated as string,
-  });
-
   // Actions
   const register = async (data: RegisterRequest): Promise<void> => {
     loading.value = true;
     error.value = null;
 
     try {
-      // Create the user
-      await pb.collection('users').create({
-        ...data,
-        passwordConfirm: data.password,
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: {
+          data: { 
+            username: data.username,
+          },
+        },
       });
 
-      // Authenticate with the new credentials
-      const authData = await pb
-        .collection('users')
-        .authWithPassword(data.email, data.password);
+      if (signUpError) throw signUpError;
 
-      user.value = mapRecordToUser(authData.record);
-      token.value = authData.token;
+      // After signUp with email confirm disabled (local dev), session is immediately available
+      if (authData.session && authData.user) {
+        if (!authData.user.email) throw new Error('User email is missing from registration response');
+        token.value = authData.session.access_token;
+        user.value = {
+          id: authData.user.id,
+          email: authData.user.email,
+          username: authData.user.user_metadata?.username ?? data.username,
+          avatar: authData.user.user_metadata?.avatar ?? '',
+          created_at: authData.user.created_at ?? new Date().toISOString(),
+          updated_at: authData.user.updated_at ?? new Date().toISOString(),
+        };
+      }
     } catch (err: unknown) {
       error.value = err instanceof Error ? err.message : 'Registration failed';
       throw err;
@@ -56,12 +58,24 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null;
 
     try {
-      const authData = await pb
-        .collection('users')
-        .authWithPassword(data.email, data.password);
+      const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      });
 
-      user.value = mapRecordToUser(authData.record);
-      token.value = authData.token;
+      if (signInError) throw signInError;
+
+      // Store token and user
+      if (!authData.user.email) throw new Error('User email is missing from login response');
+      token.value = authData.session.access_token;
+      user.value = {
+        id: authData.user.id,
+        email: authData.user.email,
+        username: authData.user.user_metadata?.username ?? '',
+        avatar: authData.user.user_metadata?.avatar ?? '',
+        created_at: authData.user.created_at ?? '',
+        updated_at: authData.user.updated_at ?? ''
+      };
     } catch (err: unknown) {
       error.value = err instanceof Error ? err.message : 'Login failed';
       throw err;
@@ -70,35 +84,60 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
-  const logout = (): void => {
-    pb.authStore.clear();
-    user.value = null;
-    token.value = null;
-    error.value = null;
-    router.push('/login');
+  const logout = async (): Promise<void> => {
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch (err) {
+      console.error('Logout error:', err);
+    } finally {
+      user.value = null;
+      token.value = null;
+      error.value = null;
+      router.push('/login');
+    }
   };
 
-  const initAuth = (): void => {
-    if (pb.authStore.isValid && pb.authStore.record) {
-      user.value = mapRecordToUser(pb.authStore.record);
-      token.value = pb.authStore.token;
-    } else {
-      pb.authStore.clear();
+  const initAuth = async (): Promise<void> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session && session.user) {
+        if (!session.user.email) throw new Error('User email is missing from session');
+        token.value = session.access_token;
+        user.value = {
+          id: session.user.id,
+          email: session.user.email,
+          username: session.user.user_metadata?.username ?? '',
+          avatar: session.user.user_metadata?.avatar ?? '',
+          created_at: session.user.created_at ?? '',
+          updated_at: session.user.updated_at ?? '',
+        };
+      }
+
+      // Set up auth state change listener for automatic token refresh
+      supabase.auth.onAuthStateChange((_event, session) => {
+        if (session && session.user) {
+          if (!session.user.email) throw new Error('User email is missing from session');
+          token.value = session.access_token;
+          user.value = {
+            id: session.user.id,
+            email: session.user.email,
+            username: session.user.user_metadata?.username ?? '',
+            avatar: session.user.user_metadata?.avatar ?? '',
+            created_at: session.user.created_at ?? '',
+            updated_at: session.user.updated_at ?? '',
+          };
+        } else {
+          token.value = null;
+          user.value = null;
+        }
+      });
+    } catch (err) {
+      console.error('Init auth error:', err);
       user.value = null;
       token.value = null;
     }
   };
-
-  // Subscribe to PocketBase auth changes
-  pb.authStore.onChange(() => {
-    if (pb.authStore.isValid && pb.authStore.record) {
-      user.value = mapRecordToUser(pb.authStore.record);
-      token.value = pb.authStore.token;
-    } else {
-      user.value = null;
-      token.value = null;
-    }
-  });
 
   return {
     user,
