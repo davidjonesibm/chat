@@ -261,11 +261,8 @@ export default async function (fastify: FastifyInstance) {
         description: group.description || '',
         owner: group.owner_id,
         members: memberIds,
-        created: group.created_at,
-        updated: group.updated_at,
-        expand: {
-          members: profiles || [],
-        },
+        created_at: group.created_at,
+        updated_at: group.updated_at,
       };
     },
   );

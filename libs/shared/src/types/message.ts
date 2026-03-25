@@ -1,8 +1,4 @@
-interface BaseRecord {
-  id: string;
-  created_at: string;
-  updated_at: string;
-}
+import type { BaseRecord } from './base';
 
 /**
  * Message record from messages table
@@ -34,4 +30,10 @@ export interface MessageWithSender {
   type: 'text' | 'system';
   created_at: string;
   updated_at: string;
+}
+
+export interface MessageListResponse {
+  messages: MessageWithSender[];
+  totalPages: number;
+  page: number;
 }

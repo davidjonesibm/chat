@@ -50,12 +50,12 @@ const router = createRouter({
 // Navigation guard
 let isFirstNavigation = true;
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore();
 
   // Initialize auth on first navigation to restore session
   if (isFirstNavigation) {
-    authStore.initAuth();
+    await authStore.initAuth();
     isFirstNavigation = false;
   }
 

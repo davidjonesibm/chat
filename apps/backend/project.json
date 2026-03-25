@@ -66,6 +66,24 @@
       "options": {
         "cwd": "{workspaceRoot}"
       }
+    },
+    "supabase-start": {
+      "command": "pnpx supabase start",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
+    },
+    "supabase-stop": {
+      "command": "pnpx supabase stop",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
+    },
+    "supabase-reset": {
+      "command": "pnpx supabase db reset",
+      "options": {
+        "cwd": "{projectRoot}"
+      }
     }
   },
   "tags": []

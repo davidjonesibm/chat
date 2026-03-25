@@ -1,6 +1,11 @@
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
-import type { Group, Channel, MessageWithSender } from '@chat/shared';
+import type {
+  Group,
+  Channel,
+  MessageWithSender,
+  MessageListResponse,
+} from '@chat/shared';
 import { useChatStore } from './chatStore';
 import { useAuthStore } from './authStore';
 
@@ -182,8 +187,8 @@ export const useChannelStore = defineStore('channel', () => {
         throw new Error(`Failed to fetch messages: ${response.statusText}`);
       }
 
-      const data = await response.json();
-      const messages: MessageWithSender[] = data.items || data;
+      const data: MessageListResponse = await response.json();
+      const messages: MessageWithSender[] = data.messages || [];
 
       const chatStore = useChatStore();
       chatStore.setMessages(messages);

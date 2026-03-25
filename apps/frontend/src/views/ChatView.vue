@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { useChannelStore } from '../stores/channelStore';
 import { useChatStore } from '../stores/chatStore';
 import { useChat } from '../composables/useChat';
@@ -13,7 +13,7 @@ import AddMemberModal from '../components/chat/AddMemberModal.vue';
 
 const channelStore = useChannelStore();
 const chatStore = useChatStore();
-const { connect, disconnect, sendMessage } = useChat();
+const { connect, disconnect, sendMessage, switchChannel } = useChat();
 
 // Sidebar toggle (mobile)
 const sidebarOpen = ref(false);
@@ -51,6 +51,15 @@ function handleMemberAdded() {
 function handleSend(content: string) {
   sendMessage(content);
 }
+
+watch(
+  () => channelStore.currentChannelId,
+  (newId, oldId) => {
+    if (newId) {
+      switchChannel(oldId ?? null, newId);
+    }
+  },
+);
 
 onMounted(async () => {
   await channelStore.fetchMyGroups();

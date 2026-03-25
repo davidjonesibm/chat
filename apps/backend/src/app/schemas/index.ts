@@ -62,7 +62,14 @@ export const messageSchema = {
     id: { type: 'string' as const },
     content: { type: 'string' as const },
     channel: { type: 'string' as const },
-    sender: { type: 'string' as const },
+    sender: {
+      type: 'object' as const,
+      properties: {
+        id: { type: 'string' as const },
+        username: { type: 'string' as const },
+        avatar: { type: 'string' as const },
+      },
+    },
     type: { type: 'string' as const },
     created_at: { type: 'string' as const },
     updated_at: { type: 'string' as const },

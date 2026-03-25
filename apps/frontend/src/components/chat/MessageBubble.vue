@@ -10,7 +10,7 @@ interface Props {
 const props = defineProps<Props>();
 
 const formattedTime = computed(() => {
-  return new Date(props.message.created).toLocaleTimeString();
+  return new Date(props.message.created_at).toLocaleTimeString();
 });
 </script>
 

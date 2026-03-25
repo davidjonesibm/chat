@@ -1,8 +1,4 @@
-interface BaseRecord {
-  id: string;
-  created_at: string;
-  updated_at: string;
-}
+import type { BaseRecord } from './base';
 
 /**
  * User record from users table
@@ -10,6 +6,7 @@ interface BaseRecord {
 export interface UserRecord extends BaseRecord {
   email: string;
   username: string;
+  name?: string;
   avatar: string;
 }
 
@@ -41,4 +38,3 @@ export interface LoginRequest {
   email: string;
   password: string;
 }
-
