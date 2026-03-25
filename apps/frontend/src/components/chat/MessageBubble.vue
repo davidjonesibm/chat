@@ -15,13 +15,23 @@ const formattedTime = computed(() => {
 </script>
 
 <template>
-  <div class="chat" :class="isOwn ? 'chat-end' : 'chat-start'">
-    <div class="chat-header">
-      {{ message.sender.username }}
-      <time class="text-xs opacity-50">{{ formattedTime }}</time>
+  <!-- System message: centered divider style -->
+  <template v-if="message.type === 'system'">
+    <div class="divider text-xs text-base-content/50">
+      <span class="italic">{{ message.content }}</span>
     </div>
-    <div class="chat-bubble" :class="isOwn ? 'chat-bubble-primary' : ''">
-      {{ message.content }}
+  </template>
+
+  <!-- Regular message: chat bubble -->
+  <template v-else>
+    <div class="chat" :class="isOwn ? 'chat-end' : 'chat-start'">
+      <div class="chat-header">
+        {{ message.sender.username }}
+        <time class="text-xs opacity-50">{{ formattedTime }}</time>
+      </div>
+      <div class="chat-bubble" :class="isOwn ? 'chat-bubble-primary' : ''">
+        {{ message.content }}
+      </div>
     </div>
-  </div>
+  </template>
 </template>

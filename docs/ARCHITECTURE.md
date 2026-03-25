@@ -761,6 +761,7 @@ gantt
 | Error handling | Reconnection UI; toast notifications for errors; retry logic             |
 | Accessibility  | ARIA labels, keyboard navigation, screen reader testing                  |
 | Performance    | Lazy loading, virtual scrolling for large message lists, bundle analysis |
+| Scroll memory  | Per-channel scroll position: save `scrollTop` before switching channels, restore on return. Currently always scrolls to bottom on channel switch. Implement with a `Map<channelId, number>` in `MessageList.vue`. This should be a user selectable option in their profile settings |
 
 **Exit Criteria**: Production-quality UX; accessible; performant.
 

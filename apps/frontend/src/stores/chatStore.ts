@@ -11,6 +11,12 @@ export const useChatStore = defineStore('chat', () => {
   const loading = ref(false);
   const connected = ref(false);
 
+  // Pagination & scroll tracking
+  const hasMore = ref(true);
+  const nextCursor = ref<string | null>(null);
+  const loadingMore = ref(false);
+  const unreadCount = ref(0);
+
   // Actions
   function addMessage(msg: MessageWithSender) {
     messages.value.push(msg);
@@ -18,6 +24,10 @@ export const useChatStore = defineStore('chat', () => {
 
   function setMessages(msgs: MessageWithSender[]) {
     messages.value = msgs;
+  }
+
+  function prependMessages(msgs: MessageWithSender[]) {
+    messages.value = [...msgs, ...messages.value];
   }
 
   function setTypingUsers(users: string[]) {
@@ -32,6 +42,13 @@ export const useChatStore = defineStore('chat', () => {
     currentChannelId.value = channelId;
   }
 
+  function resetPagination() {
+    hasMore.value = true;
+    nextCursor.value = null;
+    loadingMore.value = false;
+    unreadCount.value = 0;
+  }
+
   function clearChat() {
     messages.value = [];
     typingUsers.value = [];
@@ -39,6 +56,7 @@ export const useChatStore = defineStore('chat', () => {
     currentChannelId.value = null;
     loading.value = false;
     connected.value = false;
+    resetPagination();
   }
 
   return {
@@ -49,12 +67,18 @@ export const useChatStore = defineStore('chat', () => {
     currentChannelId,
     loading,
     connected,
+    hasMore,
+    nextCursor,
+    loadingMore,
+    unreadCount,
     // Actions
     addMessage,
     setMessages,
+    prependMessages,
     setTypingUsers,
     setOnlineUsers,
     setCurrentChannel,
+    resetPagination,
     clearChat,
   };
 });

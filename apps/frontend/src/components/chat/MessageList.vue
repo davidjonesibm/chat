@@ -1,51 +1,284 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue';
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useChatStore } from '../../stores/chatStore';
+import { useChannelStore } from '../../stores/channelStore';
 import { useAuthStore } from '../../stores/authStore';
 import MessageBubble from './MessageBubble.vue';
 
 const chatStore = useChatStore();
+const channelStore = useChannelStore();
 const authStore = useAuthStore();
 
-const { messages, loading } = storeToRefs(chatStore);
+const { messages, loading, hasMore, loadingMore, unreadCount, typingUsers } =
+  storeToRefs(chatStore);
+const { currentChannelId } = storeToRefs(channelStore);
 const { user } = storeToRefs(authStore);
 
-const messageContainer = ref<HTMLElement | null>(null);
-const scrollAnchor = ref<HTMLElement | null>(null);
-
+const scrollContainer = ref<HTMLElement | null>(null);
+const topSentinel = ref<HTMLElement | null>(null);
+const isNearBottom = ref(true);
 const currentUserId = ref(user.value?.id);
+const isPrepending = ref(false);
 
-// Auto-scroll to bottom when new messages arrive
+const typingText = computed(() => {
+  const count = typingUsers.value.length;
+  if (count === 0) return '';
+  if (count === 1) return `${typingUsers.value[0]} is typing...`;
+  if (count === 2)
+    return `${typingUsers.value[0]} and ${typingUsers.value[1]} are typing...`;
+  return `${count} people are typing...`;
+});
+
+let topObserver: IntersectionObserver | null = null;
+let previousMessageCount = 0;
+
+// Check if user is near bottom of scroll container
+function updateNearBottomStatus() {
+  if (!scrollContainer.value) return;
+
+  const { scrollTop, scrollHeight, clientHeight } = scrollContainer.value;
+  const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+
+  const wasNearBottom = isNearBottom.value;
+  isNearBottom.value = distanceFromBottom < 150;
+
+  // If user scrolled back to bottom, reset unread count
+  if (isNearBottom.value && !wasNearBottom && chatStore.unreadCount > 0) {
+    chatStore.unreadCount = 0;
+  }
+}
+
+// Scroll to bottom (smooth or instant)
+function scrollToBottom(smooth = true) {
+  if (!scrollContainer.value) return;
+
+  scrollContainer.value.scrollTo({
+    top: scrollContainer.value.scrollHeight,
+    behavior: smooth ? 'smooth' : 'auto',
+  });
+
+  chatStore.unreadCount = 0;
+}
+
+// Handle scroll event
+function handleScroll() {
+  updateNearBottomStatus();
+}
+
+// Setup infinite scroll observer
+function setupInfiniteScroll() {
+  if (!topSentinel.value) return;
+
+  topObserver = new IntersectionObserver(
+    async (entries) => {
+      const entry = entries[0];
+
+      // When sentinel enters viewport and we have more messages
+      if (
+        entry.isIntersecting &&
+        hasMore.value &&
+        !loadingMore.value &&
+        currentChannelId.value &&
+        messages.value.length > 0
+      ) {
+        const oldScrollHeight = scrollContainer.value?.scrollHeight || 0;
+
+        // Fetch older messages
+        isPrepending.value = true;
+        try {
+          await channelStore.fetchOlderMessages(currentChannelId.value);
+        } catch (err) {
+          console.error('[MessageList] Failed to fetch older messages:', err);
+        } finally {
+          // Preserve scroll position after prepend (always, even on error)
+          await nextTick();
+          if (scrollContainer.value) {
+            const newScrollHeight = scrollContainer.value.scrollHeight;
+            scrollContainer.value.scrollTop = newScrollHeight - oldScrollHeight;
+          }
+          isPrepending.value = false;
+        }
+      }
+    },
+    {
+      root: scrollContainer.value,
+      threshold: 0.1,
+    },
+  );
+
+  topObserver.observe(topSentinel.value);
+}
+
+// Watch for new messages and handle auto-scroll
 watch(
-  messages,
-  async () => {
-    await nextTick();
-    scrollAnchor.value?.scrollIntoView({ behavior: 'smooth' });
+  () => messages.value.length,
+  async (newCount, oldCount) => {
+    // Skip initial load
+    if (oldCount === 0 && newCount > 0) {
+      previousMessageCount = newCount;
+      await nextTick();
+      scrollToBottom(false); // Instant scroll on initial load
+      return;
+    }
+
+    // New messages arrived
+    if (newCount > previousMessageCount) {
+      previousMessageCount = newCount;
+
+      if (isNearBottom.value) {
+        // Auto-scroll if user is at bottom
+        await nextTick();
+        scrollToBottom(true);
+      } else if (!isPrepending.value) {
+        // Increment unread count if user is scrolled up (skip historical prepends)
+        const newMessagesCount = newCount - oldCount;
+        chatStore.unreadCount += newMessagesCount;
+      }
+    } else {
+      // Messages decreased (channel changed or cleared)
+      previousMessageCount = newCount;
+    }
   },
-  { deep: true },
 );
+
+// Watch for channel changes and scroll to bottom
+watch(currentChannelId, async () => {
+  if (currentChannelId.value) {
+    previousMessageCount = 0;
+    chatStore.unreadCount = 0;
+    isNearBottom.value = true;
+
+    await nextTick();
+    scrollToBottom(false);
+  }
+});
+
+// Setup on mount
+onMounted(() => {
+  setupInfiniteScroll();
+  previousMessageCount = messages.value.length;
+
+  // Scroll to bottom on initial mount
+  nextTick(() => {
+    scrollToBottom(false);
+  });
+});
+
+// Cleanup on unmount
+onUnmounted(() => {
+  if (topObserver) {
+    topObserver.disconnect();
+    topObserver = null;
+  }
+});
 </script>
 
 <template>
-  <div class="flex-1 overflow-y-auto p-4 space-y-1" ref="messageContainer">
-    <div v-if="loading" class="flex justify-center py-8">
-      <span class="loading loading-spinner loading-lg"></span>
-    </div>
+  <div class="relative flex-1 flex flex-col min-h-0">
+    <!-- Scroll container -->
     <div
-      v-else-if="messages.length === 0"
-      class="flex justify-center py-8 text-base-content/50"
+      class="flex-1 overflow-y-auto p-4 space-y-1"
+      ref="scrollContainer"
+      @scroll="handleScroll"
     >
-      No messages yet. Say something!
+      <!-- Top sentinel for infinite scroll -->
+      <div ref="topSentinel" class="h-1"></div>
+
+      <!-- Loading spinner at top during infinite scroll -->
+      <div v-if="loadingMore" class="flex justify-center py-2">
+        <span class="loading loading-spinner loading-sm"></span>
+      </div>
+
+      <!-- Initial loading state -->
+      <div v-if="loading" class="flex justify-center py-8">
+        <span class="loading loading-spinner loading-lg"></span>
+      </div>
+
+      <!-- Empty state -->
+      <div
+        v-else-if="messages.length === 0"
+        class="flex justify-center py-8 text-base-content/50"
+      >
+        No messages yet. Say something!
+      </div>
+
+      <!-- Messages -->
+      <template v-else>
+        <MessageBubble
+          v-for="msg in messages"
+          :key="msg.id"
+          :message="msg"
+          :is-own="msg.sender.id === currentUserId"
+        />
+      </template>
     </div>
-    <template v-else>
-      <MessageBubble
-        v-for="msg in messages"
-        :key="msg.id"
-        :message="msg"
-        :is-own="msg.sender.id === currentUserId"
-      />
-    </template>
-    <div ref="scrollAnchor"></div>
+
+    <!-- "N new messages" banner -->
+    <div
+      v-if="unreadCount > 0"
+      class="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10"
+    >
+      <button
+        class="btn btn-sm btn-primary shadow-lg"
+        @click="scrollToBottom(true)"
+      >
+        ↓ {{ unreadCount }} new {{ unreadCount === 1 ? 'message' : 'messages' }}
+      </button>
+    </div>
+  </div>
+
+  <!-- Typing indicator -->
+  <div
+    v-if="typingUsers.length > 0"
+    class="px-4 py-1 text-sm text-base-content/50 italic bg-base-100"
+  >
+    {{ typingText }}
+    <span class="typing-dots ml-1">
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+    </span>
   </div>
 </template>
+
+<style scoped>
+@keyframes bounce-dot {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-4px);
+  }
+}
+
+.typing-dots {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.typing-dots .dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: currentColor;
+  opacity: 0.6;
+  animation: bounce-dot 1.4s infinite ease-in-out;
+}
+
+.typing-dots .dot:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.typing-dots .dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-dots .dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+</style>

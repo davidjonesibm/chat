@@ -249,12 +249,6 @@ export default async function (fastify: FastifyInstance) {
       const memberIds =
         group.group_members?.map((m: { user_id: string }) => m.user_id) || [];
 
-      // Fetch profiles separately using the collected user IDs
-      const { data: profiles } = await fastify.supabaseAdmin
-        .from('profiles')
-        .select('id, username, name, avatar')
-        .in('id', memberIds);
-
       return {
         id: group.id,
         name: group.name,
@@ -264,6 +258,108 @@ export default async function (fastify: FastifyInstance) {
         created_at: group.created_at,
         updated_at: group.updated_at,
       };
+    },
+  );
+
+  /**
+   * GET /api/groups/:groupId/members
+   * Get member profiles for a group (for presence avatars display)
+   */
+  fastify.get<{ Params: { groupId: string } }>(
+    '/:groupId/members',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          properties: {
+            groupId: { type: 'string' },
+          },
+          required: ['groupId'],
+        },
+        response: {
+          200: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                username: { type: 'string' },
+                name: { type: ['string', 'null'] },
+                avatar: { type: ['string', 'null'] },
+              },
+              required: ['id', 'username'],
+            },
+          },
+          404: { $ref: 'error#' },
+        },
+      },
+    },
+    async (request: FastifyRequest<{ Params: { groupId: string } }>) => {
+      const { groupId } = request.params;
+      const userId = requireUser(request).id;
+
+      // Verify the group exists
+      const { error: groupError } = await fastify.supabaseAdmin
+        .from('groups')
+        .select('id')
+        .eq('id', groupId)
+        .single();
+
+      if (groupError) {
+        if (groupError.code === 'PGRST116') {
+          throw fastify.httpErrors.notFound('Group not found');
+        }
+        fastify.log.error(groupError);
+        throw fastify.httpErrors.internalServerError('Failed to fetch group');
+      }
+
+      // Verify user is a member of the group
+      const { data: membership } = await fastify.supabaseAdmin
+        .from('group_members')
+        .select('user_id')
+        .eq('group_id', groupId)
+        .eq('user_id', userId)
+        .single();
+
+      if (!membership) {
+        throw fastify.httpErrors.forbidden('Not a member of this group');
+      }
+
+      // Get member user IDs from group_members
+      const { data: memberData, error: memberError } =
+        await fastify.supabaseAdmin
+          .from('group_members')
+          .select('user_id')
+          .eq('group_id', groupId);
+
+      if (memberError) {
+        fastify.log.error(memberError);
+        throw fastify.httpErrors.internalServerError('Failed to fetch members');
+      }
+
+      // If no members, return empty array
+      if (!memberData || memberData.length === 0) {
+        return [];
+      }
+
+      // Extract user IDs
+      const userIds = memberData.map((m) => m.user_id);
+
+      // Fetch profiles for those user IDs
+      const { data: profiles, error: profileError } =
+        await fastify.supabaseAdmin
+          .from('profiles')
+          .select('id, username, name, avatar')
+          .in('id', userIds);
+
+      if (profileError) {
+        fastify.log.error(profileError);
+        throw fastify.httpErrors.internalServerError(
+          'Failed to fetch profiles',
+        );
+      }
+
+      return profiles || [];
     },
   );
 
@@ -367,8 +463,8 @@ export default async function (fastify: FastifyInstance) {
         description: group.description || '',
         owner: group.owner_id,
         members: members?.map((m) => m.user_id) || [],
-        created: group.created_at,
-        updated: group.updated_at,
+        created_at: group.created_at,
+        updated_at: group.updated_at,
       };
     },
   );
@@ -458,8 +554,8 @@ export default async function (fastify: FastifyInstance) {
         description: fullGroup.description || '',
         owner: fullGroup.owner_id,
         members: members?.map((m) => m.user_id) || [],
-        created: fullGroup.created_at,
-        updated: fullGroup.updated_at,
+        created_at: fullGroup.created_at,
+        updated_at: fullGroup.updated_at,
       };
     },
   );

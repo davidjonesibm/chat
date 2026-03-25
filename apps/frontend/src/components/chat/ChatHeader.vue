@@ -10,18 +10,33 @@ const emit = defineEmits<{
 
 const chatStore = useChatStore();
 const channelStore = useChannelStore();
-const { onlineUsers, typingUsers } = storeToRefs(chatStore);
+const { onlineUsers } = storeToRefs(chatStore);
+const { memberProfiles } = storeToRefs(channelStore);
 
 const onlineCount = computed(() => onlineUsers.value.length);
 
-const typingText = computed(() => {
-  const count = typingUsers.value.length;
-  if (count === 0) return '';
-  if (count === 1) return `${typingUsers.value[0]} is typing...`;
-  if (count === 2)
-    return `${typingUsers.value[0]} and ${typingUsers.value[1]} are typing...`;
-  return `${count} people are typing...`;
+// Map online user IDs to their profiles
+const onlineUserProfiles = computed(() => {
+  return onlineUsers.value
+    .map((userId) => memberProfiles.value[userId])
+    .filter(Boolean); // Filter out undefined profiles
 });
+
+// Limit to 5 visible avatars
+const MAX_VISIBLE_AVATARS = 5;
+const visibleOnlineUsers = computed(() =>
+  onlineUserProfiles.value.slice(0, MAX_VISIBLE_AVATARS),
+);
+
+const overflowCount = computed(() => {
+  const overflow = onlineUserProfiles.value.length - MAX_VISIBLE_AVATARS;
+  return overflow > 0 ? overflow : 0;
+});
+
+// Generate initials from username (first letter, uppercase)
+const getInitials = (username: string) => {
+  return username.charAt(0).toUpperCase();
+};
 
 const currentChannel = computed(() => channelStore.currentChannel);
 const currentGroup = computed(() => channelStore.currentGroup);
@@ -67,12 +82,39 @@ const groupName = computed(() => currentGroup.value?.name || '');
           }}</span>
         </div>
       </div>
+
+      <!-- Online users avatars -->
+      <div v-if="onlineCount > 0" class="flex-none">
+        <div class="avatar-group -space-x-4">
+          <div
+            v-for="user in visibleOnlineUsers"
+            :key="user.id"
+            class="avatar online"
+          >
+            <div class="w-8 h-8">
+              <img
+                v-if="user.avatar"
+                :src="user.avatar"
+                :alt="user.username"
+                class="rounded-full"
+              />
+              <div
+                v-else
+                class="rounded-full bg-neutral text-neutral-content flex items-center justify-center text-xs font-semibold"
+              >
+                {{ getInitials(user.username) }}
+              </div>
+            </div>
+          </div>
+          <div v-if="overflowCount > 0" class="avatar placeholder">
+            <div
+              class="w-8 h-8 bg-base-300 text-base-content rounded-full flex items-center justify-center text-xs"
+            >
+              +{{ overflowCount }}
+            </div>
+          </div>
+        </div>
+      </div>
     </header>
-    <div
-      v-if="typingUsers.length > 0"
-      class="px-4 py-1 text-sm text-base-content/50 italic bg-base-100"
-    >
-      {{ typingText }}
-    </div>
   </div>
 </template>

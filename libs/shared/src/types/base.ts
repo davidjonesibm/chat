@@ -9,3 +9,9 @@ export interface PaginatedResponse<T> {
   totalPages: number;
   page: number;
 }
+
+export interface CursorPaginatedResponse<T> {
+  items: T[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}

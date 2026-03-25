@@ -174,11 +174,11 @@ export default async function (fastify: FastifyInstance) {
 
   /**
    * GET /api/channels/:channelId/messages
-   * Get paginated message history for a channel
+   * Get cursor-paginated message history for a channel (infinite scroll)
    */
   fastify.get<{
     Params: { channelId: string };
-    Querystring: { page?: number; perPage?: number };
+    Querystring: { cursor?: string; limit?: number };
   }>(
     '/:channelId/messages',
     {
@@ -193,15 +193,15 @@ export default async function (fastify: FastifyInstance) {
         querystring: {
           type: 'object',
           properties: {
-            page: { type: 'integer', minimum: 1, default: 1 },
-            perPage: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
+            cursor: { type: 'string' },
+            limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
           },
         },
         response: {
           200: {
             type: 'object',
             properties: {
-              messages: {
+              items: {
                 type: 'array',
                 items: {
                   type: 'object',
@@ -223,8 +223,8 @@ export default async function (fastify: FastifyInstance) {
                   },
                 },
               },
-              totalPages: { type: 'integer' },
-              page: { type: 'integer' },
+              nextCursor: { type: ['string', 'null'] },
+              hasMore: { type: 'boolean' },
             },
           },
           403: { $ref: 'error#' },
@@ -235,12 +235,12 @@ export default async function (fastify: FastifyInstance) {
     async (
       request: FastifyRequest<{
         Params: { channelId: string };
-        Querystring: { page?: number; perPage?: number };
+        Querystring: { cursor?: string; limit?: number };
       }>,
     ) => {
       const { channelId } = request.params;
-      const page = request.query.page || 1;
-      const perPage = request.query.perPage || 50;
+      const { cursor } = request.query;
+      const limit = request.query.limit || 50;
 
       // Get the channel and verify membership
       const { data: channel, error: channelError } = await fastify.supabaseAdmin
@@ -269,22 +269,25 @@ export default async function (fastify: FastifyInstance) {
         throw fastify.httpErrors.forbidden('Not a member of this group');
       }
 
-      // Get paginated messages with sender profile
-      // Note: messages.sender_id → auth.users(id), not profiles(id)
-      // So we fetch messages first, then profiles in a second query
-      const from = (page - 1) * perPage;
-      const to = from + perPage - 1;
-
-      const {
-        data: messages,
-        error,
-        count,
-      } = await fastify.supabaseAdmin
+      // Build cursor-based query
+      // When cursor is present: fetch messages older than cursor
+      // When no cursor: fetch most recent messages
+      let query = fastify.supabaseAdmin
         .from('messages')
-        .select('*', { count: 'exact' })
-        .eq('channel_id', channelId)
-        .order('created_at', { ascending: true })
-        .range(from, to);
+        .select('*')
+        .eq('channel_id', channelId);
+
+      if (cursor) {
+        // Fetch messages older than cursor timestamp
+        query = query.lt('created_at', cursor);
+      }
+
+      // Always order by created_at descending (newest first from query perspective)
+      // Then we'll reverse to get chronological order
+      // Fetch limit+1 to determine whether there are more pages
+      const { data: messages, error } = await query
+        .order('created_at', { ascending: false })
+        .limit(limit + 1);
 
       if (error) {
         fastify.log.error(error);
@@ -293,30 +296,43 @@ export default async function (fastify: FastifyInstance) {
         );
       }
 
+      // Determine hasMore before slicing
+      const hasMore = messages.length > limit;
+      const trimmedMessages = messages.slice(0, limit);
+
+      // Reverse to chronological order (oldest first)
+      const orderedMessages = trimmedMessages.reverse();
+
       // Get unique sender IDs and fetch profiles
-      const senderIds = [...new Set(messages.map((msg) => msg.sender_id).filter(Boolean))] as string[];
-      
-      let senderProfiles: Record<string, { id: string; username: string; avatar: string | null }> = {};
-      
+      const senderIds = [
+        ...new Set(orderedMessages.map((msg) => msg.sender_id).filter(Boolean)),
+      ] as string[];
+
+      let senderProfiles: Record<
+        string,
+        { id: string; username: string; avatar: string | null }
+      > = {};
+
       if (senderIds.length > 0) {
-        const { data: profiles, error: profilesError } = await fastify.supabaseAdmin
-          .from('profiles')
-          .select('id, username, name, avatar')
-          .in('id', senderIds);
+        const { data: profiles, error: profilesError } =
+          await fastify.supabaseAdmin
+            .from('profiles')
+            .select('id, username, name, avatar')
+            .in('id', senderIds);
 
         if (profilesError) {
           fastify.log.error(profilesError);
         } else if (profiles) {
-          senderProfiles = Object.fromEntries(
-            profiles.map((p) => [p.id, p])
-          );
+          senderProfiles = Object.fromEntries(profiles.map((p) => [p.id, p]));
         }
       }
 
-      const totalPages = Math.ceil((count || 0) / perPage);
+      // nextCursor = created_at of the oldest message (first in orderedMessages)
+      const nextCursor =
+        orderedMessages.length > 0 ? orderedMessages[0].created_at : null;
 
       return {
-        messages: messages.map((msg) => {
+        items: orderedMessages.map((msg) => {
           const profile = msg.sender_id ? senderProfiles[msg.sender_id] : null;
           return {
             id: msg.id,
@@ -332,8 +348,8 @@ export default async function (fastify: FastifyInstance) {
             updated_at: msg.updated_at,
           };
         }),
-        totalPages,
-        page,
+        nextCursor,
+        hasMore,
       };
     },
   );

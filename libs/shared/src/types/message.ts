@@ -1,4 +1,4 @@
-import type { BaseRecord } from './base';
+import type { BaseRecord, CursorPaginatedResponse } from './base';
 
 /**
  * Message record from messages table
@@ -37,3 +37,6 @@ export interface MessageListResponse {
   totalPages: number;
   page: number;
 }
+
+export type CursorPaginatedMessages =
+  CursorPaginatedResponse<MessageWithSender>;

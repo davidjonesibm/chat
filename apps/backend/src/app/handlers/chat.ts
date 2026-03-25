@@ -349,14 +349,14 @@ function handleChannelJoin(
     online.add(user.id);
 
     // Emit presence update to all users in the channel
-    const serverMessage: ServerMessage = {
+    const presenceMessage: ServerMessage = {
       type: 'presence:update',
       payload: {
         channelId,
         users: Array.from(online),
       },
     };
-    broadcastToRoom(channelId, serverMessage);
+    broadcastToRoom(channelId, presenceMessage);
 
     console.log(
       `[channel:join] ${user.username} joined channel:${channelId}, online: ${online.size}`,
@@ -391,14 +391,14 @@ function handleChannelLeave(
       online.delete(user.id);
 
       // Emit presence update to remaining users in the channel
-      const serverMessage: ServerMessage = {
+      const presenceMessage: ServerMessage = {
         type: 'presence:update',
         payload: {
           channelId,
           users: Array.from(online),
         },
       };
-      broadcastToRoom(channelId, serverMessage);
+      broadcastToRoom(channelId, presenceMessage);
 
       // Clean up empty sets
       if (online.size === 0) {

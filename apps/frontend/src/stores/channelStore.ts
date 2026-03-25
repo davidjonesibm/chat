@@ -4,7 +4,7 @@ import type {
   Group,
   Channel,
   MessageWithSender,
-  MessageListResponse,
+  CursorPaginatedMessages,
 } from '@chat/shared';
 import { useChatStore } from './chatStore';
 import { useAuthStore } from './authStore';
@@ -18,6 +18,17 @@ export const useChannelStore = defineStore('channel', () => {
   const currentGroupId = ref<string | null>(null);
   const currentChannelId = ref<string | null>(null);
   const loading = ref(false);
+  const memberProfiles = ref<
+    Record<
+      string,
+      {
+        id: string;
+        username: string;
+        name: string | null;
+        avatar: string | null;
+      }
+    >
+  >({});
 
   // Getters
   const currentGroup = computed(
@@ -153,6 +164,9 @@ export const useChannelStore = defineStore('channel', () => {
     // Fetch channels for this group
     await fetchChannels(groupId);
 
+    // Fetch member profiles for this group
+    await fetchGroupMembers(groupId);
+
     // Auto-select default channel or first channel
     const channelToSelect = defaultChannel.value || channels.value[0];
     if (channelToSelect) {
@@ -174,10 +188,15 @@ export const useChannelStore = defineStore('channel', () => {
   }
 
   async function fetchMessages(channelId: string): Promise<void> {
+    const chatStore = useChatStore();
+
+    // Reset pagination state before fetching
+    chatStore.resetPagination();
+
     loading.value = true;
     try {
       const response = await fetch(
-        `${baseUrl}/api/channels/${channelId}/messages?page=1&perPage=50`,
+        `${baseUrl}/api/channels/${channelId}/messages?limit=50`,
         {
           headers: getHeaders(),
         },
@@ -187,16 +206,95 @@ export const useChannelStore = defineStore('channel', () => {
         throw new Error(`Failed to fetch messages: ${response.statusText}`);
       }
 
-      const data: MessageListResponse = await response.json();
-      const messages: MessageWithSender[] = data.messages || [];
+      const data: CursorPaginatedMessages = await response.json();
+      const messages: MessageWithSender[] = data.items || [];
 
-      const chatStore = useChatStore();
       chatStore.setMessages(messages);
+      chatStore.nextCursor = data.nextCursor || null;
+      chatStore.hasMore = data.hasMore;
     } catch (err) {
       console.error('[ChannelStore] Failed to fetch messages:', err);
       throw err;
     } finally {
       loading.value = false;
+    }
+  }
+
+  async function fetchOlderMessages(channelId: string): Promise<void> {
+    const chatStore = useChatStore();
+
+    // Guard: if no more messages or already loading, return early
+    if (!chatStore.hasMore || chatStore.loadingMore) {
+      return;
+    }
+
+    chatStore.loadingMore = true;
+    try {
+      let url = `${baseUrl}/api/channels/${channelId}/messages?limit=50`;
+      if (chatStore.nextCursor) {
+        url += `&cursor=${encodeURIComponent(chatStore.nextCursor)}`;
+      }
+      const response = await fetch(url, {
+        headers: getHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch older messages: ${response.statusText}`,
+        );
+      }
+
+      const data: CursorPaginatedMessages = await response.json();
+      const messages: MessageWithSender[] = data.items || [];
+
+      chatStore.prependMessages(messages);
+      chatStore.nextCursor = data.nextCursor || null;
+      chatStore.hasMore = data.hasMore;
+    } catch (err) {
+      console.error('[ChannelStore] Failed to fetch older messages:', err);
+      throw err;
+    } finally {
+      chatStore.loadingMore = false;
+    }
+  }
+
+  async function fetchGroupMembers(groupId: string): Promise<void> {
+    try {
+      const response = await fetch(`${baseUrl}/api/groups/${groupId}/members`, {
+        headers: getHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch group members: ${response.statusText}`,
+        );
+      }
+
+      const members = await response.json();
+
+      // Populate memberProfiles as a lookup by user ID
+      const profilesLookup: Record<
+        string,
+        {
+          id: string;
+          username: string;
+          name: string | null;
+          avatar: string | null;
+        }
+      > = {};
+      for (const member of members) {
+        profilesLookup[member.id] = {
+          id: member.id,
+          username: member.username,
+          name: member.name || null,
+          avatar: member.avatar || null,
+        };
+      }
+
+      memberProfiles.value = profilesLookup;
+    } catch (err) {
+      console.error('[ChannelStore] Failed to fetch group members:', err);
+      throw err;
     }
   }
 
@@ -234,6 +332,7 @@ export const useChannelStore = defineStore('channel', () => {
     currentGroupId,
     currentChannelId,
     loading,
+    memberProfiles,
     // Getters
     currentGroup,
     currentChannel,
@@ -246,6 +345,8 @@ export const useChannelStore = defineStore('channel', () => {
     selectGroup,
     selectChannel,
     fetchMessages,
+    fetchOlderMessages,
+    fetchGroupMembers,
     addMember,
   };
 });
