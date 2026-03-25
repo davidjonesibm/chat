@@ -91,10 +91,11 @@ chat/
 │   └── shared/                    # Shared TypeScript types
 │       └── src/
 │           ├── types/
-│           │   ├── message.ts
-│           │   ├── channel.ts
-│           │   ├── auth.ts
-│           │   └── events.ts              # WebSocket message contracts (discriminated unions)
+│           │   ├── base.ts                # BaseRecord, PaginatedResponse<T>
+│           │   ├── auth.ts                # UserRecord, User, auth request/response types
+│           │   ├── channel.ts             # GroupRecord, Group, ChannelRecord, Channel, CRUD request types
+│           │   ├── message.ts             # MessageRecord, Message, MessageWithSender, MessageListResponse
+│           │   └── events.ts              # ClientMessage, ServerMessage discriminated unions; WsUser
 │           └── index.ts
 │
 └── docs/
@@ -233,6 +234,116 @@ erDiagram
 - A **Message** belongs to exactly one **Channel** and one **User** (sender).
 - A **Profile** is auto-created by a PostgreSQL trigger on `auth.users` insert.
 
+### 3.5 Shared Type Library (`libs/shared`)
+
+All shared TypeScript types are published from `libs/shared` and imported via the `@chat/shared` package alias. The library uses a consistent set of design patterns to ensure end-to-end type safety across the frontend and backend.
+
+#### Type Hierarchy Pattern
+
+Every domain entity uses a two-level type hierarchy:
+
+```
+*Record (DB shape)  ──Pick──►  Plain type (API shape)
+```
+
+| DB record type                     | API-facing type | Purpose                          |
+| ---------------------------------- | --------------- | -------------------------------- |
+| `UserRecord extends BaseRecord`    | `User`          | Full DB row vs. safe API payload |
+| `GroupRecord extends BaseRecord`   | `Group`         | Full DB row vs. safe API payload |
+| `ChannelRecord extends BaseRecord` | `Channel`       | Full DB row vs. safe API payload |
+| `MessageRecord extends BaseRecord` | `Message`       | Full DB row vs. safe API payload |
+
+`BaseRecord` provides guaranteed `id`, `created_at`, and `updated_at` fields to all domain types:
+
+```ts
+interface BaseRecord {
+  id: string;
+  created_at: string;
+  updated_at: string;
+}
+```
+
+API-facing types (e.g. `User`, `Group`) are derived via `Pick<*Record, ...>` — only the fields safe to expose over the network are included, keeping persistence-layer concerns out of the API contract.
+
+#### Request / Response Types
+
+Every API endpoint has explicit request and response types defined in the shared library:
+
+| Type                                         | Description                                                                    |
+| -------------------------------------------- | ------------------------------------------------------------------------------ |
+| `RegisterRequest` / `LoginRequest`           | Auth endpoint payloads                                                         |
+| `AuthResponse`                               | Unified auth success shape (`{ user: User; token: string }`)                   |
+| `RegisterResponse` / `LoginResponse`         | Semantic aliases for `AuthResponse`                                            |
+| `CreateGroupRequest` / `CreateGroupResponse` | Group creation (response includes the auto-created default channel)            |
+| `CreateChannelRequest`                       | Channel creation payload                                                       |
+| `AddMemberRequest`                           | Group membership payload                                                       |
+| `MessageListResponse`                        | Paginated message list (`{ messages: MessageWithSender[]; totalPages; page }`) |
+
+#### WebSocket Message Types
+
+WebSocket messages use **discriminated unions** on the `type` field, enabling exhaustive type narrowing in switch statements:
+
+```ts
+// TypeScript narrows payload automatically:
+function handle(msg: ClientMessage) {
+  switch (msg.type) {
+    case 'message:send': // msg.payload is MessageSendPayload
+    case 'channel:join': // msg.payload is ChannelPayload
+  }
+}
+```
+
+`WsUser` is a minimal user shape attached to the WebSocket session at auth time:
+
+```ts
+interface WsUser {
+  id: string;
+  email: string;
+  username: string;
+}
+```
+
+#### `MessageWithSender`
+
+Read-heavy API endpoints use `MessageWithSender` instead of the raw `Message` type to inline the sender object, avoiding N+1 joins on the client:
+
+```ts
+interface MessageWithSender {
+  id: string;
+  content: string;
+  channel: string;
+  type: 'text' | 'system';
+  created_at: string;
+  updated_at: string;
+  sender: { id: string; username: string; avatar?: string };
+}
+```
+
+#### Pagination
+
+The generic `PaginatedResponse<T>` interface is the canonical pagination envelope:
+
+```ts
+interface PaginatedResponse<T> {
+  items: T[];
+  totalPages: number;
+  page: number;
+}
+```
+
+#### Importing
+
+All types are exported from a single barrel (`libs/shared/src/index.ts`) and consumed via the workspace package alias:
+
+```ts
+import type {
+  User,
+  Channel,
+  ClientMessage,
+  MessageWithSender,
+} from '@chat/shared';
+```
+
 ---
 
 ## 4. Real-Time Architecture
@@ -350,6 +461,8 @@ All messages are sent as **JSON strings** over the WebSocket connection at `/ws`
   "payload": { "channelId": "abc123", "content": "Hello!" }
 }
 ```
+
+> All WebSocket message types (`ClientMessage`, `ServerMessage`) and their payload interfaces are defined in `libs/shared/src/types/events.ts` and imported via `@chat/shared`.
 
 ### 5.2 Server → Client (`ServerMessage`)
 
@@ -755,6 +868,8 @@ Regardless of scaling stage, these remain constant:
 | Pinia stores            | `camelCase` with `Store` suffix | `chatStore`, `authStore`                               |
 | WebSocket message types | `noun:verb`                     | `message:send`, `typing:start`                         |
 | API routes              | `kebab-case` (REST)             | `/api/groups/:id/channels`                             |
+| DB record type          | `*Record` suffix                | `UserRecord`, `ChannelRecord`, `MessageRecord`         |
+| API payload types       | `*Request` / `*Response` suffix | `LoginRequest`, `AuthResponse`, `CreateGroupResponse`  |
 
 ---
 
