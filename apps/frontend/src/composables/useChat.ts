@@ -2,8 +2,9 @@ import { ref } from 'vue';
 import type { ClientMessage, ServerMessage } from '@chat/shared';
 import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
+import { enqueueMessage, flushQueue } from '../lib/offlineQueue';
 
-const baseUrl = import.meta.env.VITE_WS_URL || 'http://localhost:3000';
+const baseUrl = import.meta.env.VITE_WS_URL || window.location.origin;
 
 // Convert http/https to ws/wss
 function getWebSocketUrl(token: string): string {
@@ -49,6 +50,22 @@ export function useChat() {
       error.value = null;
       reconnectAttempts = 0;
       console.log('[WebSocket] Connected');
+
+      // Flush offline message queue
+      flushQueue((channelId, content) => {
+        sendClientMessage({
+          type: 'message:send',
+          payload: { channelId, content },
+        });
+      })
+        .then((count) => {
+          if (count > 0) {
+            console.log(`[WebSocket] Flushed ${count} queued messages`);
+          }
+        })
+        .catch((err) => {
+          console.error('[WebSocket] Failed to flush queue:', err);
+        });
 
       // Auto-join current channel
       if (chatStore.currentChannelId) {
@@ -160,11 +177,19 @@ export function useChat() {
   }
 
   function sendMessage(content: string) {
-    if (
-      !ws ||
-      ws.readyState !== WebSocket.OPEN ||
-      !chatStore.currentChannelId
-    ) {
+    if (!chatStore.currentChannelId) {
+      return;
+    }
+
+    // If WebSocket is not connected, enqueue message for later
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      enqueueMessage(chatStore.currentChannelId, content)
+        .then(() => {
+          console.log('[WebSocket] Message queued for offline delivery');
+        })
+        .catch((err) => {
+          console.error('[WebSocket] Failed to queue message:', err);
+        });
       return;
     }
 

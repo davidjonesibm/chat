@@ -9,7 +9,7 @@ import type {
 import { useChatStore } from './chatStore';
 import { useAuthStore } from './authStore';
 
-const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
 
 export const useChannelStore = defineStore('channel', () => {
   // State

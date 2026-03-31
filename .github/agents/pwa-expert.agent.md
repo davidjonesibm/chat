@@ -1,7 +1,6 @@
 ---
 name: PWA Expert
 description: ALL Progressive Web App work: service workers, Workbox configuration, web app manifests, installability, offline-first strategies, push notifications, background sync, Core Web Vitals for PWAs, vite-plugin-pwa integration, and iOS Safari compatibility.
-model: Claude Sonnet 4.5
 tools: ['search/codebase', 'search/changes', 'search/fileSearch', 'search/searchResults', 'search/usages', 'search/textSearch', 'search/listDirectory', 'edit/editFiles', 'edit/createFile', 'edit/createDirectory', 'read/readFile', 'read/problems', 'read/terminalLastCommand', 'read/terminalSelection', 'execute/runInTerminal', 'execute/getTerminalOutput', 'execute/createAndRunTask', 'execute/awaitTerminal', 'execute/testFailure', 'vscode/extensions', 'vscode/getProjectSetupInfo', 'vscode/runCommand', 'vscode/vscodeAPI', 'web/fetch', 'web/githubRepo', 'agent/runSubagent']
 handoffs:
   - label: Research with Context7

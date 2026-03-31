@@ -8,7 +8,14 @@ import type {
   MessageSendPayload,
   TypingPayload,
   ChannelPayload,
+  PushNotificationPayload,
 } from '@chat/shared';
+
+// Type for push sender function passed from socket plugin
+export type PushSender = (
+  userId: string,
+  payload: PushNotificationPayload,
+) => Promise<void>;
 
 // Track WebSocket connections per channel (room tracking)
 const channelRooms = new Map<string, Set<WebSocket>>();
@@ -27,6 +34,17 @@ const typingTimeouts = new Map<string, NodeJS.Timeout>();
 
 // Track online users per channel: channelId -> Set<userId>
 const onlineUsers = new Map<string, Set<string>>();
+
+/**
+ * Get all currently online user IDs across all channels
+ */
+export function getOnlineUserIds(): Set<string> {
+  const ids = new Set<string>();
+  for (const user of socketUsers.values()) {
+    ids.add(user.id);
+  }
+  return ids;
+}
 
 /**
  * Broadcast a message to all WebSockets in a room
@@ -84,13 +102,20 @@ async function handleMessage(
   data: string,
   user: WsUser,
   supabase: SupabaseClient<Database>,
+  pushSender?: PushSender,
 ): Promise<void> {
   try {
     const clientMessage: ClientMessage = JSON.parse(data);
 
     switch (clientMessage.type) {
       case 'message:send':
-        await handleMessageSend(ws, clientMessage.payload, user, supabase);
+        await handleMessageSend(
+          ws,
+          clientMessage.payload,
+          user,
+          supabase,
+          pushSender,
+        );
         break;
 
       case 'typing:start':
@@ -125,6 +150,7 @@ async function handleMessageSend(
   payload: MessageSendPayload,
   user: WsUser,
   supabase: SupabaseClient<Database>,
+  pushSender?: PushSender,
 ): Promise<void> {
   try {
     const { channelId, content } = payload;
@@ -202,8 +228,104 @@ async function handleMessageSend(
     console.log(
       `[message:send] Message sent to channel:${channelId} by ${user.username}`,
     );
+
+    // Send push notifications to offline users (fire and forget)
+    if (pushSender) {
+      sendPushToOfflineUsers(
+        channelId,
+        message.content,
+        user,
+        senderData.username,
+        supabase,
+        pushSender,
+      ).catch((err) => {
+        console.error('[message:send] Push notification error:', err);
+      });
+    }
   } catch (err) {
     console.error('[message:send] Error:', err);
+  }
+}
+
+/**
+ * Send push notifications to offline users in a channel
+ */
+async function sendPushToOfflineUsers(
+  channelId: string,
+  messageContent: string,
+  sender: WsUser,
+  senderUsername: string,
+  supabase: SupabaseClient<Database>,
+  pushSender: PushSender,
+): Promise<void> {
+  try {
+    // Get the channel's group_id
+    const { data: channel, error: channelError } = await supabase
+      .from('channels')
+      .select('group_id, name')
+      .eq('id', channelId)
+      .single();
+
+    if (channelError || !channel) {
+      console.error('[push] Failed to fetch channel:', channelError);
+      return;
+    }
+
+    // Get all members of the group
+    const { data: members, error: membersError } = await supabase
+      .from('group_members')
+      .select('user_id')
+      .eq('group_id', channel.group_id);
+
+    if (membersError || !members) {
+      console.error('[push] Failed to fetch group members:', membersError);
+      return;
+    }
+
+    // Get currently online user IDs
+    const onlineUserIds = getOnlineUserIds();
+
+    // Filter to offline users (not online, not the sender)
+    const offlineUserIds = members
+      .map((m) => m.user_id)
+      .filter((userId) => userId !== sender.id && !onlineUserIds.has(userId));
+
+    if (offlineUserIds.length === 0) {
+      console.log('[push] No offline users to notify');
+      return;
+    }
+
+    // Truncate message content for notification
+    const truncatedContent =
+      messageContent.length > 100
+        ? messageContent.substring(0, 97) + '...'
+        : messageContent;
+
+    // Send push to each offline user
+    let successCount = 0;
+    const pushPromises = offlineUserIds.map(async (userId) => {
+      const payload: PushNotificationPayload = {
+        title: `${senderUsername} in ${channel.name}`,
+        body: truncatedContent,
+        channelId,
+        groupId: channel.group_id,
+        senderUsername,
+      };
+
+      try {
+        await pushSender(userId, payload);
+        successCount++;
+      } catch (err) {
+        console.error(`[push] Failed to send to user ${userId}:`, err);
+      }
+    });
+
+    await Promise.all(pushPromises);
+    console.log(
+      `[push] Attempted ${offlineUserIds.length} push(es), ${successCount} delivered successfully`,
+    );
+  } catch (err) {
+    console.error('[push] Error sending push notifications:', err);
   }
 }
 
@@ -499,6 +621,7 @@ export function handleWebSocketConnection(
   socket: WebSocket,
   user: WsUser,
   supabase: SupabaseClient<Database>,
+  pushSender?: PushSender,
 ): void {
   console.log(`[WebSocket] User connected: ${user.username}`);
 
@@ -508,7 +631,7 @@ export function handleWebSocketConnection(
 
   // Handle incoming messages
   socket.on('message', (data: Buffer) => {
-    handleMessage(socket, data.toString(), user, supabase);
+    handleMessage(socket, data.toString(), user, supabase, pushSender);
   });
 
   // Handle disconnection

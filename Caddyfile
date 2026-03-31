@@ -1,0 +1,27 @@
+192.168.86.20:8443 {
+    tls internal
+    log
+
+    # Named matchers for Supabase and Fastify paths
+    @supabase path /rest/v1/* /auth/v1/* /storage/v1/* /realtime/v1/* /functions/v1/*
+    @fastify  path /api/* /ws /ws/*
+
+    route {
+        # Supabase local dev (Kong gateway on port 54321)
+        handle @supabase {
+            reverse_proxy localhost:54321
+        }
+
+        # Fastify backend
+        handle @fastify {
+            reverse_proxy localhost:3000
+        }
+
+        # Serve frontend static files, fallback to index.html for SPA routing
+        handle {
+            root * /Users/david/projects/chat/dist/apps/frontend
+            try_files {path} /index.html
+            file_server
+        }
+    }
+}

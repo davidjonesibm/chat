@@ -1,7 +1,6 @@
 ---
 description: ALL Fastify backend work - route handlers, plugins, hooks, schemas, serialization, authentication, error handling, and TypeScript integration
 name: Fastify Expert
-model: Claude Sonnet 4.5
 argument-hint: Ask me about route handlers, plugins, hooks, schemas, auth, or any Fastify pattern
 tools:
   [

@@ -1,8 +1,35 @@
 ---
 description: 'Expert Vue.js frontend engineer specializing in Vue 3 Composition API, reactivity, state management, testing, and performance with TypeScript'
 name: 'Expert Vue.js Frontend Engineer'
-model: 'Claude Sonnet 4.5'
-tools: ['search/codebase', 'search/changes', 'search/fileSearch', 'search/searchResults', 'search/usages', 'search/textSearch', 'search/listDirectory', 'edit/editFiles', 'edit/createFile', 'edit/createDirectory', 'read/readFile', 'read/problems', 'read/terminalLastCommand', 'read/terminalSelection', 'execute/runInTerminal', 'execute/getTerminalOutput', 'execute/createAndRunTask', 'execute/awaitTerminal', 'execute/testFailure', 'vscode/extensions', 'vscode/getProjectSetupInfo', 'vscode/runCommand', 'vscode/vscodeAPI', 'web/fetch', 'web/githubRepo', 'agent/runSubagent']
+tools:
+  [
+    'search/codebase',
+    'search/changes',
+    'search/fileSearch',
+    'search/searchResults',
+    'search/usages',
+    'search/textSearch',
+    'search/listDirectory',
+    'edit/editFiles',
+    'edit/createFile',
+    'edit/createDirectory',
+    'read/readFile',
+    'read/problems',
+    'read/terminalLastCommand',
+    'read/terminalSelection',
+    'execute/runInTerminal',
+    'execute/getTerminalOutput',
+    'execute/createAndRunTask',
+    'execute/awaitTerminal',
+    'execute/testFailure',
+    'vscode/extensions',
+    'vscode/getProjectSetupInfo',
+    'vscode/runCommand',
+    'vscode/vscodeAPI',
+    'web/fetch',
+    'web/githubRepo',
+    'agent/runSubagent',
+  ]
 handoffs:
   - label: Research with Context7
     agent: Context7-Expert

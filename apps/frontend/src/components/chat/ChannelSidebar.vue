@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useChannelStore } from '../../stores/channelStore';
 import { useAuthStore } from '../../stores/authStore';
+import PushToggle from './PushToggle.vue';
 
 const router = useRouter();
 const channelStore = useChannelStore();
@@ -123,6 +124,9 @@ function getGroupChannels(groupId: string) {
         </div>
       </div>
     </div>
+
+    <!-- Push Notifications Toggle -->
+    <PushToggle />
 
     <!-- User Info & Logout -->
     <div
