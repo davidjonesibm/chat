@@ -1,9 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
 import { useAuthStore } from '../stores/authStore';
-import ChatView from '../views/ChatView.vue';
-import LoginView from '../views/LoginView.vue';
-import RegisterView from '../views/RegisterView.vue';
+
+const ChatView = () => import('../views/ChatView.vue');
+const LoginView = () => import('../views/LoginView.vue');
+const RegisterView = () => import('../views/RegisterView.vue');
 
 const routes: RouteRecordRaw[] = [
   {

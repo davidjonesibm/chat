@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useChatStore } from '../../stores/chatStore';
 import { useChat } from '../../composables/useChat';
@@ -9,16 +9,38 @@ const emit = defineEmits<{
 }>();
 
 const chatStore = useChatStore();
-const { connected } = storeToRefs(chatStore);
+const { connected, reconnecting } = storeToRefs(chatStore);
 const { startTyping, stopTyping } = useChat();
 
 const messageText = ref('');
+const isOnline = ref(navigator.onLine);
+
+function handleOnline() {
+  isOnline.value = true;
+}
+function handleOffline() {
+  isOnline.value = false;
+}
+
+onMounted(() => {
+  window.addEventListener('online', handleOnline);
+  window.addEventListener('offline', handleOffline);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('online', handleOnline);
+  window.removeEventListener('offline', handleOffline);
+});
+
+const placeholder = computed(() => {
+  if (!isOnline.value) return 'Offline \u2014 messages will be queued';
+  if (reconnecting.value && !connected.value) return 'Reconnecting\u2026';
+  return 'Type a message...';
+});
 
 function handleSend() {
   const content = messageText.value.trim();
-  if (!content || !connected.value) {
-    return;
-  }
+  if (!content) return;
 
   emit('send', content);
   messageText.value = '';
@@ -42,16 +64,17 @@ function onBlur() {
       <input
         v-model="messageText"
         type="text"
-        placeholder="Type a message..."
+        :placeholder="placeholder"
+        aria-label="Type a message"
         class="input input-bordered flex-1"
         @input="onTyping"
         @blur="onBlur"
-        :disabled="!connected"
       />
       <button
         type="submit"
         class="btn btn-primary"
-        :disabled="!messageText.trim() || !connected"
+        aria-label="Send message"
+        :disabled="!messageText.trim()"
       >
         Send
       </button>

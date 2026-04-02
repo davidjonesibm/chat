@@ -1,26 +1,13 @@
 /// <reference types='vitest' />
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
-import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
-import { nxCopyAssetsPlugin } from '@nx/vite/plugins/nx-copy-assets.plugin';
+import tsconfigPaths from 'vite-tsconfig-paths';
 import { VitePWA } from 'vite-plugin-pwa';
-import { resolve } from 'path';
 
-export default defineConfig(() => ({
-  root: import.meta.dirname,
-  cacheDir: '../../node_modules/.vite/apps/frontend',
-  server: {
-    port: 4200,
-    host: 'localhost',
-  },
-  preview: {
-    port: 4300,
-    host: 'localhost',
-  },
-  plugins: [
+export default defineConfig(async () => {
+  const plugins = [
     vue(),
-    nxViteTsPaths(),
-    nxCopyAssetsPlugin(['*.md']),
+    tsconfigPaths(),
     VitePWA({
       strategies: 'injectManifest',
       srcDir: 'src',
@@ -61,18 +48,56 @@ export default defineConfig(() => ({
         type: 'module',
       },
     }),
-  ],
-  // Uncomment this if you are using workers.
-  worker: {
-    plugins: () => [nxViteTsPaths()],
-  },
-  build: {
-    outDir: '../../dist/apps/frontend',
-    emptyOutDir: true,
-    reportCompressedSize: true,
-    commonjsOptions: {
-      transformMixedEsModules: true,
+  ];
+
+  if (process.env.ANALYZE) {
+    try {
+      const { visualizer } = await import('rollup-plugin-visualizer');
+      plugins.push(
+        visualizer({
+          filename: '../../dist/apps/frontend/stats.html',
+          open: true,
+          gzipSize: true,
+          brotliSize: true,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        }) as any,
+      );
+    } catch {
+      // rollup-plugin-visualizer not installed, skip
+    }
+  }
+
+  return {
+    root: import.meta.dirname,
+    cacheDir: '../../node_modules/.vite/apps/frontend',
+    server: {
+      port: 4200,
+      host: 'localhost',
     },
-  },
-  envDir: resolve(import.meta.dirname, '../..'), // point to workspace root
-}));
+    preview: {
+      port: 4300,
+      host: 'localhost',
+    },
+    plugins,
+    // Uncomment this if you are using workers.
+    worker: {
+      plugins: () => [tsconfigPaths()],
+    },
+    build: {
+      outDir: '../../dist/apps/frontend',
+      emptyOutDir: true,
+      reportCompressedSize: true,
+      commonjsOptions: {
+        transformMixedEsModules: true,
+      },
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'vue-vendor': ['vue', 'vue-router', 'pinia'],
+            supabase: ['@supabase/supabase-js'],
+          },
+        },
+      },
+    },
+  };
+});

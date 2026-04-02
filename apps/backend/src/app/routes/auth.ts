@@ -1,6 +1,10 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { createClient } from '@supabase/supabase-js';
-import type { RegisterRequest, LoginRequest } from '@chat/shared';
+import type {
+  RegisterRequest,
+  LoginRequest,
+  UpdateProfileRequest,
+} from '@chat/shared';
 
 function requireUser(request: FastifyRequest) {
   if (!request.user)
@@ -215,6 +219,210 @@ export default async function (fastify: FastifyInstance) {
         created_at: profile.created_at,
         updated_at: profile.updated_at,
       };
+    },
+  );
+
+  /**
+   * PATCH /api/auth/profile
+   * Update current user's profile (protected route)
+   */
+  fastify.patch<{ Body: UpdateProfileRequest }>(
+    '/profile',
+    {
+      preHandler: [fastify.authenticate],
+      schema: {
+        body: {
+          type: 'object',
+          properties: {
+            username: { type: 'string', minLength: 1 },
+            name: { type: 'string', minLength: 1 },
+            avatar: { type: 'string' },
+          },
+          anyOf: [
+            { required: ['username'] },
+            { required: ['name'] },
+            { required: ['avatar'] },
+          ],
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              user: { $ref: 'user#' },
+            },
+          },
+          400: { $ref: 'error#' },
+          401: { $ref: 'error#' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = requireUser(request);
+      const { username, name, avatar } = request.body;
+
+      // Build profile update payload (only provided fields)
+      const profileUpdate: Record<string, string> = {};
+      if (username !== undefined) profileUpdate.username = username.trim();
+      if (name !== undefined) profileUpdate.name = name.trim();
+      if (avatar !== undefined) profileUpdate.avatar = avatar;
+
+      // Update profiles table
+      const { data: profile, error: profileError } = await fastify.supabaseAdmin
+        .from('profiles')
+        .update(profileUpdate)
+        .eq('id', user.id)
+        .select('*')
+        .single();
+
+      if (profileError) {
+        fastify.log.error(profileError, 'Profile update failed');
+        throw fastify.httpErrors.internalServerError(
+          'Failed to update profile',
+        );
+      }
+
+      // Sync user_metadata for fields that live on auth.users
+      const metadataUpdate: Record<string, string> = {};
+      if (username !== undefined) metadataUpdate.username = username.trim();
+      if (name !== undefined) metadataUpdate.name = name.trim();
+      if (avatar !== undefined) metadataUpdate.avatar = avatar;
+
+      if (Object.keys(metadataUpdate).length > 0) {
+        const { error: authError } =
+          await fastify.supabaseAdmin.auth.admin.updateUserById(user.id, {
+            user_metadata: metadataUpdate,
+          });
+
+        if (authError) {
+          fastify.log.error(authError, 'User metadata update failed');
+          // Profile was updated, metadata sync failed — log but don't fail the request
+        }
+      }
+
+      return {
+        user: {
+          id: profile.id,
+          email: user.email,
+          username: profile.username || '',
+          avatar: profile.avatar || '',
+          created_at: profile.created_at,
+          updated_at: profile.updated_at,
+        },
+      };
+    },
+  );
+
+  /**
+   * POST /api/auth/avatar
+   * Upload avatar image (protected route, multipart/form-data)
+   */
+  const ALLOWED_MIME_TYPES = [
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+  ] as const;
+
+  const MIME_TO_EXT: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+  };
+
+  fastify.post(
+    '/avatar',
+    {
+      preHandler: [fastify.authenticate],
+      schema: {
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              url: { type: 'string' },
+            },
+          },
+          400: { $ref: 'error#' },
+          401: { $ref: 'error#' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = requireUser(request);
+
+      const file = await request.file();
+      if (!file) {
+        throw fastify.httpErrors.badRequest('No file uploaded');
+      }
+
+      // Validate mime type on server side
+      if (
+        !ALLOWED_MIME_TYPES.includes(
+          file.mimetype as (typeof ALLOWED_MIME_TYPES)[number],
+        )
+      ) {
+        throw fastify.httpErrors.badRequest(
+          `Invalid file type: ${file.mimetype}. Allowed: ${ALLOWED_MIME_TYPES.join(', ')}`,
+        );
+      }
+
+      // Consume the file stream into a buffer
+      const buffer = await file.toBuffer();
+
+      // Validate file size (also enforced by multipart limits, but double-check)
+      if (buffer.byteLength > 2 * 1024 * 1024) {
+        throw fastify.httpErrors.badRequest(
+          'File too large. Maximum size is 2MB.',
+        );
+      }
+
+      const ext = MIME_TO_EXT[file.mimetype];
+      const storagePath = `${user.id}/avatar.${ext}`;
+
+      // Upload to Supabase Storage with upsert
+      const { error: uploadError } = await fastify.supabaseAdmin.storage
+        .from('avatars')
+        .upload(storagePath, buffer, {
+          contentType: file.mimetype,
+          upsert: true,
+        });
+
+      if (uploadError) {
+        fastify.log.error(uploadError, 'Avatar upload failed');
+        throw fastify.httpErrors.internalServerError('Failed to upload avatar');
+      }
+
+      // Get public URL
+      const {
+        data: { publicUrl },
+      } = fastify.supabaseAdmin.storage
+        .from('avatars')
+        .getPublicUrl(storagePath);
+
+      // Update profiles table
+      const { error: profileError } = await fastify.supabaseAdmin
+        .from('profiles')
+        .update({ avatar: publicUrl })
+        .eq('id', user.id);
+
+      if (profileError) {
+        fastify.log.error(profileError, 'Profile avatar update failed');
+        throw fastify.httpErrors.internalServerError(
+          'Failed to update profile avatar',
+        );
+      }
+
+      // Sync auth.users metadata
+      const { error: authError } =
+        await fastify.supabaseAdmin.auth.admin.updateUserById(user.id, {
+          user_metadata: { avatar: publicUrl },
+        });
+
+      if (authError) {
+        fastify.log.error(authError, 'User metadata avatar update failed');
+      }
+
+      return { url: publicUrl };
     },
   );
 }

@@ -1,10 +1,12 @@
 import { FastifyInstance } from 'fastify';
 import sensible from '@fastify/sensible';
+import multipart from '@fastify/multipart';
 import authPlugin from './plugins/auth';
 import authRoutes from './routes/auth';
 import groupRoutes from './routes/groups';
 import channelRoutes from './routes/channels';
 import pushRoutes from './routes/push';
+import searchRoutes from './routes/search';
 import rootRoutes from './routes/root';
 import { registerSharedSchemas } from './schemas';
 
@@ -12,6 +14,9 @@ export async function app(fastify: FastifyInstance) {
   // Register plugins first (order matters: sensible → auth)
   // Note: supabasePlugin and pushPlugin are registered at root level in main.ts
   fastify.register(sensible);
+  fastify.register(multipart, {
+    limits: { fileSize: 2 * 1024 * 1024 },
+  });
   fastify.register(authPlugin);
 
   // Register shared JSON schemas for validation and serialization
@@ -22,5 +27,6 @@ export async function app(fastify: FastifyInstance) {
   fastify.register(groupRoutes, { prefix: '/groups' });
   fastify.register(channelRoutes, { prefix: '/channels' });
   fastify.register(pushRoutes, { prefix: '/push' });
+  fastify.register(searchRoutes, { prefix: '/api/search' });
   fastify.register(rootRoutes);
 }

@@ -3,8 +3,9 @@ import type { ClientMessage, ServerMessage } from '@chat/shared';
 import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
 import { enqueueMessage, flushQueue } from '../lib/offlineQueue';
+import { useToast } from './useToast';
 
-const baseUrl = import.meta.env.VITE_WS_URL || window.location.origin;
+const baseUrl = import.meta.env.VITE_SOCKET_URL || window.location.origin;
 
 // Convert http/https to ws/wss
 function getWebSocketUrl(token: string): string {
@@ -23,7 +24,11 @@ let typingTimeout: ReturnType<typeof setTimeout> | null = null;
 const TYPING_DEBOUNCE_MS = 2000;
 
 // Reconnection config
+const MAX_RECONNECT_ATTEMPTS = 10;
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 30000]; // exponential backoff with max 30s
+
+// Track whether the first connection has been established
+let hasConnectedOnce = false;
 
 export function useChat() {
   const chatStore = useChatStore();
@@ -47,9 +52,17 @@ export function useChat() {
 
     ws.onopen = () => {
       chatStore.connected = true;
+      chatStore.reconnecting = false;
+      chatStore.reconnectAttempt = 0;
       error.value = null;
       reconnectAttempts = 0;
       console.log('[WebSocket] Connected');
+
+      // Show toast only on reconnection, not the first connect
+      if (hasConnectedOnce) {
+        useToast().addToast('success', 'Connected to chat');
+      }
+      hasConnectedOnce = true;
 
       // Flush offline message queue
       flushQueue((channelId, content) => {
@@ -98,6 +111,10 @@ export function useChat() {
             console.log('[WebSocket] Channel updated:', message.payload);
             break;
 
+          case 'error':
+            useToast().addToast('error', message.payload.message);
+            break;
+
           default:
             console.warn('[WebSocket] Unknown message type:', message);
         }
@@ -114,6 +131,16 @@ export function useChat() {
 
       // Attempt reconnection if not manually disconnected
       if (!isManualDisconnect) {
+        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+          chatStore.reconnecting = false;
+          useToast().addToast(
+            'error',
+            'Unable to connect. Please refresh the page.',
+          );
+          return;
+        }
+
+        chatStore.reconnecting = true;
         const delay = getReconnectDelay();
         console.log(
           `[WebSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttempts + 1})...`,
@@ -121,6 +148,7 @@ export function useChat() {
 
         reconnectTimeout = setTimeout(() => {
           reconnectAttempts++;
+          chatStore.reconnectAttempt = reconnectAttempts;
           connect();
         }, delay);
       }
@@ -128,6 +156,7 @@ export function useChat() {
 
     ws.onerror = (event) => {
       error.value = 'WebSocket connection error';
+      useToast().addToast('error', 'Connection error');
       console.error('[WebSocket] Error:', event);
     };
   }
@@ -172,6 +201,8 @@ export function useChat() {
     ws.close();
     ws = null;
     chatStore.connected = false;
+    chatStore.reconnecting = false;
+    chatStore.reconnectAttempt = 0;
     reconnectAttempts = 0;
     console.log('[WebSocket] Manually disconnected');
   }

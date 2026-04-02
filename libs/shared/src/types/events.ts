@@ -50,7 +50,8 @@ export type ServerMessage =
   | { type: 'message:new'; payload: MessageNewPayload }
   | { type: 'typing:update'; payload: TypingUpdatePayload }
   | { type: 'presence:update'; payload: PresenceUpdatePayload }
-  | { type: 'channel:updated'; payload: ChannelUpdatedPayload };
+  | { type: 'channel:updated'; payload: ChannelUpdatedPayload }
+  | { type: 'error'; payload: { code: string; message: string } };
 
 // --- User data attached to WebSocket connections ---
 

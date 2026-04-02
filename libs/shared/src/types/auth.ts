@@ -38,3 +38,17 @@ export interface LoginRequest {
   email: string;
   password: string;
 }
+
+export interface UpdateProfileRequest {
+  username?: string;
+  name?: string;
+  avatar?: string;
+}
+
+export interface UpdateProfileResponse {
+  user: User;
+}
+
+export interface AvatarUploadResponse {
+  url: string;
+}

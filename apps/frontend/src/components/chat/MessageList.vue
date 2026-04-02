@@ -178,6 +178,9 @@ onUnmounted(() => {
   <div class="relative flex-1 flex flex-col min-h-0">
     <!-- Scroll container -->
     <div
+      role="log"
+      aria-live="polite"
+      aria-label="Message history"
       class="flex-1 overflow-y-auto p-4 space-y-1"
       ref="scrollContainer"
       @scroll="handleScroll"
@@ -221,6 +224,7 @@ onUnmounted(() => {
     >
       <button
         class="btn btn-sm btn-primary shadow-lg"
+        :aria-label="`${unreadCount} new ${unreadCount === 1 ? 'message' : 'messages'}, click to scroll down`"
         @click="scrollToBottom(true)"
       >
         ↓ {{ unreadCount }} new {{ unreadCount === 1 ? 'message' : 'messages' }}
@@ -231,6 +235,8 @@ onUnmounted(() => {
   <!-- Typing indicator -->
   <div
     v-if="typingUsers.length > 0"
+    role="status"
+    aria-live="polite"
     class="px-4 py-1 text-sm text-base-content/50 italic bg-base-100"
   >
     {{ typingText }}

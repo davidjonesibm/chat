@@ -7,7 +7,7 @@ import type {
   CursorPaginatedMessages,
 } from '@chat/shared';
 import { useChatStore } from './chatStore';
-import { useAuthStore } from './authStore';
+import { apiFetch } from '../lib/api';
 
 const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
 
@@ -41,29 +41,11 @@ export const useChannelStore = defineStore('channel', () => {
     () => channels.value.find((c) => c.is_default) || null,
   );
 
-  // Helper for API calls
-  const getHeaders = () => {
-    const authStore = useAuthStore();
-    return {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${authStore.token}`,
-    };
-  };
-
   // Actions
   async function fetchMyGroups(): Promise<void> {
     loading.value = true;
     try {
-      const response = await fetch(`${baseUrl}/api/groups`, {
-        headers: getHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch groups: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      groups.value = data;
+      groups.value = await apiFetch<Group[]>(`${baseUrl}/api/groups`);
     } catch (err) {
       console.error('[ChannelStore] Failed to fetch groups:', err);
       throw err;
@@ -78,17 +60,10 @@ export const useChannelStore = defineStore('channel', () => {
   ): Promise<Group> {
     loading.value = true;
     try {
-      const response = await fetch(`${baseUrl}/api/groups`, {
+      const data = await apiFetch<{ group: Group }>(`${baseUrl}/api/groups`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify({ name, description }),
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to create group: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       const newGroup = data.group;
 
       groups.value.push(newGroup);
@@ -108,19 +83,9 @@ export const useChannelStore = defineStore('channel', () => {
   async function fetchChannels(groupId: string): Promise<void> {
     loading.value = true;
     try {
-      const response = await fetch(
+      channels.value = await apiFetch<Channel[]>(
         `${baseUrl}/api/channels?groupId=${groupId}`,
-        {
-          headers: getHeaders(),
-        },
       );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch channels: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      channels.value = data;
     } catch (err) {
       console.error('[ChannelStore] Failed to fetch channels:', err);
       throw err;
@@ -136,17 +101,10 @@ export const useChannelStore = defineStore('channel', () => {
   ): Promise<Channel> {
     loading.value = true;
     try {
-      const response = await fetch(`${baseUrl}/api/channels`, {
+      const newChannel = await apiFetch<Channel>(`${baseUrl}/api/channels`, {
         method: 'POST',
-        headers: getHeaders(),
         body: JSON.stringify({ name, groupId, description }),
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to create channel: ${response.statusText}`);
-      }
-
-      const newChannel = await response.json();
       channels.value.push(newChannel);
 
       return newChannel;
@@ -195,18 +153,9 @@ export const useChannelStore = defineStore('channel', () => {
 
     loading.value = true;
     try {
-      const response = await fetch(
+      const data = await apiFetch<CursorPaginatedMessages>(
         `${baseUrl}/api/channels/${channelId}/messages?limit=50`,
-        {
-          headers: getHeaders(),
-        },
       );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch messages: ${response.statusText}`);
-      }
-
-      const data: CursorPaginatedMessages = await response.json();
       const messages: MessageWithSender[] = data.items || [];
 
       chatStore.setMessages(messages);
@@ -234,17 +183,7 @@ export const useChannelStore = defineStore('channel', () => {
       if (chatStore.nextCursor) {
         url += `&cursor=${encodeURIComponent(chatStore.nextCursor)}`;
       }
-      const response = await fetch(url, {
-        headers: getHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch older messages: ${response.statusText}`,
-        );
-      }
-
-      const data: CursorPaginatedMessages = await response.json();
+      const data = await apiFetch<CursorPaginatedMessages>(url);
       const messages: MessageWithSender[] = data.items || [];
 
       chatStore.prependMessages(messages);
@@ -260,17 +199,14 @@ export const useChannelStore = defineStore('channel', () => {
 
   async function fetchGroupMembers(groupId: string): Promise<void> {
     try {
-      const response = await fetch(`${baseUrl}/api/groups/${groupId}/members`, {
-        headers: getHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch group members: ${response.statusText}`,
-        );
-      }
-
-      const members = await response.json();
+      const members = await apiFetch<
+        {
+          id: string;
+          username: string;
+          name: string | null;
+          avatar: string | null;
+        }[]
+      >(`${baseUrl}/api/groups/${groupId}/members`);
 
       // Populate memberProfiles as a lookup by user ID
       const profilesLookup: Record<
@@ -301,18 +237,13 @@ export const useChannelStore = defineStore('channel', () => {
   async function addMember(groupId: string, userId: string): Promise<void> {
     loading.value = true;
     try {
-      const response = await fetch(`${baseUrl}/api/groups/${groupId}/members`, {
-        method: 'POST',
-        headers: getHeaders(),
-        body: JSON.stringify({ userId }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to add member: ${response.statusText}`);
-      }
-
-      // Update local group record
-      const updatedGroup = await response.json();
+      const updatedGroup = await apiFetch<Group>(
+        `${baseUrl}/api/groups/${groupId}/members`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ userId }),
+        },
+      );
       const index = groups.value.findIndex((g) => g.id === groupId);
       if (index !== -1) {
         groups.value[index] = updatedGroup;

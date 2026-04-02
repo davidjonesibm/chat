@@ -1,11 +1,11 @@
 import { ref } from 'vue';
-import { useAuthStore } from '../stores/authStore';
 import type {
   PushSubscribeRequest,
   PushSubscribeResponse,
   PushUnsubscribeRequest,
   VapidPublicKeyResponse,
 } from '@chat/shared';
+import { apiFetch } from '../lib/api';
 
 const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
 
@@ -18,16 +18,10 @@ const pushPermission = ref<NotificationPermission>(
 const subscribed = ref(false);
 
 export function usePush() {
-  const authStore = useAuthStore();
-
   async function getVapidPublicKey(): Promise<string> {
-    const response = await fetch(`${baseUrl}/api/push/vapid-public-key`);
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch VAPID public key');
-    }
-
-    const data: VapidPublicKeyResponse = await response.json();
+    const data = await apiFetch<VapidPublicKeyResponse>(
+      `${baseUrl}/api/push/vapid-public-key`,
+    );
     return data.publicKey;
   }
 
@@ -80,21 +74,15 @@ export function usePush() {
         },
       };
 
-      const response = await fetch(`${baseUrl}/api/push/subscribe`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authStore.token}`,
+      const response = await apiFetch<PushSubscribeResponse>(
+        `${baseUrl}/api/push/subscribe`,
+        {
+          method: 'POST',
+          body: JSON.stringify(requestBody),
         },
-        body: JSON.stringify(requestBody),
-      });
+      );
 
-      if (!response.ok) {
-        throw new Error('Failed to subscribe to push notifications');
-      }
-
-      const data: PushSubscribeResponse = await response.json();
-      subscribed.value = data.success;
+      subscribed.value = response.success;
       console.log('[Push] Subscribed successfully');
       return data.success;
     } catch (error) {
@@ -119,19 +107,13 @@ export function usePush() {
 
         const requestBody: PushUnsubscribeRequest = { endpoint };
 
-        const response = await fetch(`${baseUrl}/api/push/unsubscribe`, {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${authStore.token}`,
-          },
-          body: JSON.stringify(requestBody),
-        });
-
-        if (response.ok) {
-          await response.json();
+        try {
+          await apiFetch(`${baseUrl}/api/push/unsubscribe`, {
+            method: 'DELETE',
+            body: JSON.stringify(requestBody),
+          });
           console.log('[Push] Unsubscribed successfully');
-        } else {
+        } catch {
           console.warn('[Push] Failed to notify backend of unsubscribe');
         }
       }

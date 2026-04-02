@@ -3,9 +3,11 @@ import { computed } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useChatStore } from '../../stores/chatStore';
 import { useChannelStore } from '../../stores/channelStore';
+import UserAvatar from '../ui/UserAvatar.vue';
 
 const emit = defineEmits<{
   'toggle-sidebar': [];
+  'toggle-search': [];
 }>();
 
 const chatStore = useChatStore();
@@ -52,7 +54,11 @@ const groupName = computed(() => currentGroup.value?.name || '');
     <header class="navbar bg-base-200 border-b border-base-300">
       <!-- Mobile hamburger menu -->
       <div class="flex-none lg:hidden">
-        <button class="btn btn-ghost btn-sm" @click="emit('toggle-sidebar')">
+        <button
+          class="btn btn-ghost btn-sm"
+          aria-label="Open sidebar"
+          @click="emit('toggle-sidebar')"
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
@@ -83,28 +89,42 @@ const groupName = computed(() => currentGroup.value?.name || '');
         </div>
       </div>
 
+      <!-- Search button -->
+      <div class="flex-none">
+        <button
+          class="btn btn-ghost btn-sm btn-square"
+          aria-label="Search messages"
+          @click="emit('toggle-search')"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            class="inline-block w-5 h-5 stroke-current"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            ></path>
+          </svg>
+        </button>
+      </div>
+
       <!-- Online users avatars -->
       <div v-if="onlineCount > 0" class="flex-none">
-        <div class="avatar-group -space-x-4">
+        <div class="avatar-group -space-x-4" aria-label="Online users">
           <div
             v-for="user in visibleOnlineUsers"
             :key="user.id"
             class="avatar online"
           >
-            <div class="w-8 h-8">
-              <img
-                v-if="user.avatar"
-                :src="user.avatar"
-                :alt="user.username"
-                class="rounded-full"
-              />
-              <div
-                v-else
-                class="rounded-full bg-neutral text-neutral-content flex items-center justify-center text-xs font-semibold"
-              >
-                {{ getInitials(user.username) }}
-              </div>
-            </div>
+            <UserAvatar
+              :username="user.username"
+              :avatar-url="user.avatar"
+              size="sm"
+            />
           </div>
           <div v-if="overflowCount > 0" class="avatar placeholder">
             <div

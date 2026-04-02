@@ -1,6 +1,14 @@
 import { ref, computed } from 'vue';
 import { defineStore } from 'pinia';
-import type { User, RegisterRequest, LoginRequest } from '@chat/shared';
+import type {
+  User,
+  RegisterRequest,
+  LoginRequest,
+  UpdateProfileRequest,
+  UpdateProfileResponse,
+  AvatarUploadResponse,
+} from '@chat/shared';
+import { apiFetch } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import router from '../router';
 
@@ -20,21 +28,24 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null;
 
     try {
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: {
-          data: { 
-            username: data.username,
+      const { data: authData, error: signUpError } = await supabase.auth.signUp(
+        {
+          email: data.email,
+          password: data.password,
+          options: {
+            data: {
+              username: data.username,
+            },
           },
         },
-      });
+      );
 
       if (signUpError) throw signUpError;
 
       // After signUp with email confirm disabled (local dev), session is immediately available
       if (authData.session && authData.user) {
-        if (!authData.user.email) throw new Error('User email is missing from registration response');
+        if (!authData.user.email)
+          throw new Error('User email is missing from registration response');
         token.value = authData.session.access_token;
         user.value = {
           id: authData.user.id,
@@ -58,15 +69,17 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null;
 
     try {
-      const { data: authData, error: signInError } = await supabase.auth.signInWithPassword({
-        email: data.email,
-        password: data.password,
-      });
+      const { data: authData, error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email: data.email,
+          password: data.password,
+        });
 
       if (signInError) throw signInError;
 
       // Store token and user
-      if (!authData.user.email) throw new Error('User email is missing from login response');
+      if (!authData.user.email)
+        throw new Error('User email is missing from login response');
       token.value = authData.session.access_token;
       user.value = {
         id: authData.user.id,
@@ -74,7 +87,7 @@ export const useAuthStore = defineStore('auth', () => {
         username: authData.user.user_metadata?.username ?? '',
         avatar: authData.user.user_metadata?.avatar ?? '',
         created_at: authData.user.created_at ?? '',
-        updated_at: authData.user.updated_at ?? ''
+        updated_at: authData.user.updated_at ?? '',
       };
     } catch (err: unknown) {
       error.value = err instanceof Error ? err.message : 'Login failed';
@@ -99,10 +112,13 @@ export const useAuthStore = defineStore('auth', () => {
 
   const initAuth = async (): Promise<void> => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       if (session && session.user) {
-        if (!session.user.email) throw new Error('User email is missing from session');
+        if (!session.user.email)
+          throw new Error('User email is missing from session');
         token.value = session.access_token;
         user.value = {
           id: session.user.id,
@@ -117,7 +133,8 @@ export const useAuthStore = defineStore('auth', () => {
       // Set up auth state change listener for automatic token refresh
       supabase.auth.onAuthStateChange((_event, session) => {
         if (session && session.user) {
-          if (!session.user.email) throw new Error('User email is missing from session');
+          if (!session.user.email)
+            throw new Error('User email is missing from session');
           token.value = session.access_token;
           user.value = {
             id: session.user.id,
@@ -139,6 +156,42 @@ export const useAuthStore = defineStore('auth', () => {
     }
   };
 
+  const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+
+  const updateProfile = async (data: UpdateProfileRequest): Promise<void> => {
+    const response = await apiFetch<UpdateProfileResponse>(
+      `${baseUrl}/api/auth/profile`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      },
+    );
+    user.value = response.user;
+  };
+
+  const uploadAvatar = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    const headers: Record<string, string> = {};
+    if (token.value) {
+      headers['Authorization'] = `Bearer ${token.value}`;
+    }
+
+    const response = await fetch(`${baseUrl}/api/auth/avatar`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Avatar upload failed: ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as AvatarUploadResponse;
+    return data.url;
+  };
+
   return {
     user,
     token,
@@ -149,5 +202,7 @@ export const useAuthStore = defineStore('auth', () => {
     login,
     logout,
     initAuth,
+    updateProfile,
+    uploadAvatar,
   };
 });

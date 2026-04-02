@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, nextTick } from 'vue';
 import { useChannelStore } from '../../stores/channelStore';
 
 interface Props {
@@ -19,6 +19,7 @@ const channelStore = useChannelStore();
 const userId = ref('');
 const loading = ref(false);
 const error = ref<string | null>(null);
+const userIdInput = ref<HTMLInputElement | null>(null);
 
 // Reset form when modal opens
 watch(
@@ -27,6 +28,7 @@ watch(
     if (isOpen) {
       userId.value = '';
       error.value = null;
+      nextTick(() => userIdInput.value?.focus());
     }
   },
 );
@@ -57,15 +59,23 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <dialog class="modal" :class="{ 'modal-open': modelValue }">
+  <dialog
+    class="modal"
+    :class="{ 'modal-open': modelValue }"
+    aria-labelledby="add-member-title"
+    aria-modal="true"
+  >
     <div class="modal-box">
-      <h3 class="font-bold text-lg">Add Member to Group</h3>
+      <h3 id="add-member-title" class="font-bold text-lg">
+        Add Member to Group
+      </h3>
       <form @submit.prevent="handleSubmit">
         <div class="form-control w-full mt-4">
           <label class="label">
             <span class="label-text">User ID</span>
           </label>
           <input
+            ref="userIdInput"
             v-model="userId"
             type="text"
             placeholder="Enter user ID"

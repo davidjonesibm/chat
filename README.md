@@ -57,56 +57,35 @@ VITE_API_URL=http://localhost:3000
 VITE_WS_URL=http://localhost:3000
 ```
 
-## Using pnpm & Nx commands
-
-This repo is an [Nx monorepo](https://nx.dev) managed with pnpm workspaces. Always prefix `nx` with `pnpm` so the workspace-local version is used — never rely on a globally installed `nx`.
+## Commands
 
 ### Installing dependencies
 
 ```bash
-pnpm install           # install all workspace dependencies
-pnpm install --filter @chat/backend   # install for one package only
-pnpm add <pkg> --filter @chat/backend # add a dependency to a specific package
+pnpm install                                  # install all workspace dependencies
+pnpm add <pkg> --filter @chat/backend         # add a dependency to a specific package
 ```
 
-### Running targets
+### Development
 
 ```bash
-# Generic form
-pnpm nx run <project>:<target>
-pnpm nx run <project>:<target>:<configuration>
-
-# Common shortcuts (nx infers the project from the name)
-pnpm nx serve backend          # start backend in watch/dev mode (tsx watch)
-pnpm nx dev frontend           # start Vite dev server
-pnpm nx build backend          # production build → dist/apps/backend/
-pnpm nx build frontend         # production build → dist/apps/frontend/
-pnpm nx test frontend          # run Vitest unit tests
-pnpm nx lint backend           # ESLint
+pnpm dev:frontend      # start Vite dev server (port 4200)
+pnpm dev:backend       # start backend in watch mode (tsx watch)
 ```
 
-### Running across the whole workspace
+### Building
 
 ```bash
-pnpm nx run-many -t build           # build every project
-pnpm nx run-many -t test lint       # test + lint every project in parallel
-pnpm nx affected -t build test      # only projects affected by your changes
+pnpm build                            # build all packages
+pnpm build:frontend                   # build frontend only
+pnpm build:backend                    # build backend only
 ```
 
-### Inspecting the workspace
+### Testing & Linting
 
 ```bash
-pnpm nx show projects              # list all projects
-pnpm nx show project frontend --web  # open interactive target explorer
-pnpm nx graph                      # open dependency graph in browser
-```
-
-### Caching
-
-Nx caches task outputs locally in `.nx/cache`. Re-running an unchanged target is instant. To force a fresh run:
-
-```bash
-pnpm nx run backend:build --skip-nx-cache
+pnpm test              # test all packages
+pnpm lint              # lint all packages
 ```
 
 ---
@@ -126,7 +105,7 @@ Keep this running. Studio is at **http://localhost:54323**.
 ### Terminal 2 — Backend (Fastify + WebSocket)
 
 ```bash
-pnpm nx serve backend
+pnpm dev:backend
 ```
 
 Runs on **http://localhost:3000**
@@ -134,7 +113,7 @@ Runs on **http://localhost:3000**
 ### Terminal 3 — Frontend (Vue 3 + Vite)
 
 ```bash
-pnpm nx dev frontend
+pnpm dev:frontend
 ```
 
 Runs on **http://localhost:4200**

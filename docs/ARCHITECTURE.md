@@ -31,7 +31,7 @@
 | **Real-time (ephemeral)** | @fastify/websocket (native WebSocket)       | Bi-directional WebSocket transport for typing indicators, presence, instant message relay; JSON messages with discriminated unions                                                                 |
 | **Push Notifications**    | `web-push` (W3C Web Push API + VAPID)       | Zero infrastructure cost; direct push to browser endpoints via standard Web Push Protocol; VAPID authentication; simple ~50 lines of integration; scales to Azure Notification Hub later if needed |
 | **PWA Tooling**           | vite-plugin-pwa (`injectManifest` strategy) | Full control over service worker; Workbox precaching + custom push handler                                                                                                                         |
-| **Monorepo**              | Nx + pnpm workspaces                        | Task orchestration, caching, dependency graph, code generation; pnpm for fast, disk-efficient installs                                                                                             |
+| **Monorepo**              | pnpm workspaces                             | Workspace dependency management; fast, disk-efficient installs; run tasks via `pnpm --filter`                                                                                                      |
 | **Auth**                  | Supabase Auth (email/password)              | Built-in email/password auth with JWT tokens; service role key for server-side admin operations; frontend uses anon key only for auth                                                              |
 
 ---
@@ -547,7 +547,7 @@ gantt
     axisFormat  Phase %q
 
     section Phase 1 — Foundation
-    Nx scaffold (Vue, Fastify, shared lib)     :p1a, 2026-01-01, 7d
+    Scaffold (Vue, Fastify, shared lib)         :p1a, 2026-01-01, 7d
     PocketBase setup + collections             :p1b, after p1a, 5d
     Auth (email/password login + register)     :p1c, after p1b, 5d
     Chat (single general channel)              :p1d, after p1c, 7d
@@ -595,7 +595,7 @@ gantt
 
 | Task     | Description                                                                   |
 | -------- | ----------------------------------------------------------------------------- |
-| Scaffold | Nx generators for Vue 3 app, Fastify app, shared TypeScript library           |
+| Scaffold | Vue 3 app, Fastify app, shared TypeScript library                             |
 | Supabase | Start local Supabase CLI stack; apply migrations (`supabase db reset`)        |
 | Auth     | Email/password registration and login via Supabase Auth SDK; Pinia auth store |
 | Chat     | Single hardcoded "general" channel; send and receive messages via WebSocket   |

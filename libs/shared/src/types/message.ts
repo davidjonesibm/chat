@@ -1,4 +1,8 @@
-import type { BaseRecord, CursorPaginatedResponse } from './base';
+import type {
+  BaseRecord,
+  CursorPaginatedResponse,
+  PaginatedResponse,
+} from './base';
 
 /**
  * Message record from messages table
@@ -40,3 +44,14 @@ export interface MessageListResponse {
 
 export type CursorPaginatedMessages =
   CursorPaginatedResponse<MessageWithSender>;
+
+export interface MessageSearchRequest {
+  query: string;
+  channelId?: string;
+  groupId: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface MessageSearchResponse
+  extends CursorPaginatedResponse<MessageWithSender> {}

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, nextTick } from 'vue';
 import { useChannelStore } from '../../stores/channelStore';
 
 interface Props {
@@ -20,6 +20,7 @@ const name = ref('');
 const description = ref('');
 const loading = ref(false);
 const error = ref<string | null>(null);
+const nameInput = ref<HTMLInputElement | null>(null);
 
 // Reset form when modal opens
 watch(
@@ -29,6 +30,7 @@ watch(
       name.value = '';
       description.value = '';
       error.value = null;
+      nextTick(() => nameInput.value?.focus());
     }
   },
 );
@@ -64,15 +66,23 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <dialog class="modal" :class="{ 'modal-open': modelValue }">
+  <dialog
+    class="modal"
+    :class="{ 'modal-open': modelValue }"
+    aria-labelledby="create-channel-title"
+    aria-modal="true"
+  >
     <div class="modal-box">
-      <h3 class="font-bold text-lg">Create Channel</h3>
+      <h3 id="create-channel-title" class="font-bold text-lg">
+        Create Channel
+      </h3>
       <form @submit.prevent="handleSubmit">
         <div class="form-control w-full mt-4">
           <label class="label">
             <span class="label-text">Channel Name</span>
           </label>
           <input
+            ref="nameInput"
             v-model="name"
             type="text"
             placeholder="e.g. general"

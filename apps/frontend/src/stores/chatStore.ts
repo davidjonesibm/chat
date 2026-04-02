@@ -10,6 +10,8 @@ export const useChatStore = defineStore('chat', () => {
   const currentChannelId = ref<string | null>(null);
   const loading = ref(false);
   const connected = ref(false);
+  const reconnecting = ref(false);
+  const reconnectAttempt = ref(0);
 
   // Pagination & scroll tracking
   const hasMore = ref(true);
@@ -56,6 +58,8 @@ export const useChatStore = defineStore('chat', () => {
     currentChannelId.value = null;
     loading.value = false;
     connected.value = false;
+    reconnecting.value = false;
+    reconnectAttempt.value = 0;
     resetPagination();
   }
 
@@ -67,6 +71,8 @@ export const useChatStore = defineStore('chat', () => {
     currentChannelId,
     loading,
     connected,
+    reconnecting,
+    reconnectAttempt,
     hasMore,
     nextCursor,
     loadingMore,

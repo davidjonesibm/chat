@@ -18,7 +18,7 @@ applyTo: '**'
 | Real-time          | Fastify WebSocket (`@fastify/websocket`) | Ephemeral: typing, presence, message relay |
 | Push notifications | `web-push` (VAPID) via Fastify           | Served from `routes/push.ts`               |
 | PWA                | `vite-plugin-pwa` (`injectManifest`)     | Service worker in `apps/frontend/`         |
-| Monorepo tooling   | Nx + pnpm workspaces                     | Run tasks via `pnpm nx …`                  |
+| Monorepo tooling   | pnpm workspaces                          | Run tasks via `pnpm --filter …`            |
 
 ## Shared Types (`@chat/shared`)
 

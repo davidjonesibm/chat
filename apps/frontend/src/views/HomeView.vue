@@ -1,9 +1,5 @@
-<script setup lang="ts">
-import NxWelcome from '../app/NxWelcome.vue';
-</script>
-
 <template>
-  <main>
-    <NxWelcome title="frontend" />
+  <main class="flex items-center justify-center min-h-screen">
+    <router-link to="/" class="btn btn-primary">Go to Chat</router-link>
   </main>
 </template>

@@ -1,3 +1,3 @@
 # shared
 
-This library was generated with [Nx](https://nx.dev).
+Shared TypeScript types and utilities for the chat monorepo. Imported as `@chat/shared`.

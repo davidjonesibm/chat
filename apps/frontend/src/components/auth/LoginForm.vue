@@ -30,36 +30,42 @@ const handleSubmit = async () => {
       <div class="card-body">
         <h2 class="card-title text-2xl font-bold mb-4">Login</h2>
 
-        <div v-if="error" class="alert alert-error mb-4">
+        <div v-if="error" class="alert alert-error mb-4" role="alert">
           <span>{{ error }}</span>
         </div>
 
         <form @submit.prevent="handleSubmit">
           <div class="w-full mb-4">
-            <label class="label">
+            <label class="label" for="login-email">
               <span>Email</span>
             </label>
             <input
+              id="login-email"
               v-model="email"
               type="email"
               placeholder="Enter your email"
               class="input w-full"
+              :aria-invalid="!!error"
               required
             />
           </div>
 
           <div class="w-full mb-4">
-            <label class="label">
+            <label class="label" for="login-password">
               <span>Password</span>
             </label>
             <input
+              id="login-password"
               v-model="password"
               type="password"
               placeholder="Enter your password"
               class="input w-full"
+              aria-describedby="login-password-hint"
+              :aria-invalid="!!error"
               minlength="8"
               required
             />
+            <p id="login-password-hint" class="sr-only">Minimum 8 characters</p>
           </div>
 
           <div class="mt-6">

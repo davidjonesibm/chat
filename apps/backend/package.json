@@ -2,9 +2,17 @@
   "name": "@chat/backend",
   "version": "0.0.0",
   "private": true,
+  "scripts": {
+    "serve": "tsx watch --env-file .env src/main.ts",
+    "build": "tsc --noEmit && esbuild src/main.ts --bundle --platform=node --outdir=../../dist/apps/backend --sourcemap --format=cjs --packages=external",
+    "lint": "eslint .",
+    "db-start": "supabase start",
+    "db-stop": "supabase stop"
+  },
   "dependencies": {
     "@chat/shared": "workspace:*",
     "@fastify/cors": "^10.0.0",
+    "@fastify/multipart": "^9.0.0",
     "@fastify/sensible": "~6.0.2",
     "@fastify/websocket": "^11.0.0",
     "@supabase/supabase-js": "^2.0.0",
@@ -13,6 +21,7 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
+    "@types/busboy": "^1.5.4",
     "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.1",
     "supabase": "^2.83.0"
