@@ -41,7 +41,10 @@ const formattedTime = computed(() => {
         {{ message.sender.username }}
         <time class="text-xs opacity-50">{{ formattedTime }}</time>
       </div>
-      <div class="chat-bubble" :class="isOwn ? 'chat-bubble-primary' : ''">
+      <div
+        class="chat-bubble"
+        :class="isOwn ? 'chat-bubble-primary' : 'chat-bubble-secondary'"
+      >
         {{ message.content }}
       </div>
     </article>

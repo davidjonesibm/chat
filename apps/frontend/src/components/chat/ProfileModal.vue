@@ -143,7 +143,10 @@ async function handleSubmit() {
       <form @submit.prevent="handleSubmit">
         <!-- Avatar -->
         <div class="flex justify-center mt-4">
-          <div class="cursor-pointer" @click="triggerFileInput">
+          <div
+            class="cursor-pointer flex flex-col items-center"
+            @click="triggerFileInput"
+          >
             <UserAvatar
               v-if="!previewUrl"
               :username="authStore.user?.username ?? ''"

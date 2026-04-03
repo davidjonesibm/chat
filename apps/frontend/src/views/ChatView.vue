@@ -74,11 +74,12 @@ function handleToggleSearch() {
   showSearch.value = !showSearch.value;
 }
 
-function handleNavigateToMessage(channelId: string) {
+async function handleNavigateToMessage(channelId: string, messageId: string) {
   showSearch.value = false;
   if (channelId !== channelStore.currentChannelId) {
-    channelStore.selectChannel(channelId);
+    await channelStore.selectChannel(channelId);
   }
+  chatStore.highlightedMessageId = messageId;
 }
 
 watch(

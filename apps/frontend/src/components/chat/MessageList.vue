@@ -10,8 +10,15 @@ const chatStore = useChatStore();
 const channelStore = useChannelStore();
 const authStore = useAuthStore();
 
-const { messages, loading, hasMore, loadingMore, unreadCount, typingUsers } =
-  storeToRefs(chatStore);
+const {
+  messages,
+  loading,
+  hasMore,
+  loadingMore,
+  unreadCount,
+  typingUsers,
+  highlightedMessageId,
+} = storeToRefs(chatStore);
 const { currentChannelId } = storeToRefs(channelStore);
 const { user } = storeToRefs(authStore);
 
@@ -142,6 +149,19 @@ watch(
   },
 );
 
+// Watch for highlighted message and scroll to it
+watch(highlightedMessageId, async (messageId) => {
+  if (!messageId) return;
+  await nextTick();
+  const el = scrollContainer.value?.querySelector(
+    `[data-message-id="${messageId}"]`,
+  );
+  if (el) {
+    (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  chatStore.highlightedMessageId = null;
+});
+
 // Watch for channel changes and scroll to bottom
 watch(currentChannelId, async () => {
   if (currentChannelId.value) {
@@ -175,7 +195,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="relative flex-1 flex flex-col min-h-0">
+  <div class="relative flex-1 flex flex-col min-h-0 bg-base-100">
     <!-- Scroll container -->
     <div
       role="log"
@@ -208,12 +228,12 @@ onUnmounted(() => {
 
       <!-- Messages -->
       <template v-else>
-        <MessageBubble
-          v-for="msg in messages"
-          :key="msg.id"
-          :message="msg"
-          :is-own="msg.sender.id === currentUserId"
-        />
+        <div v-for="msg in messages" :key="msg.id" :data-message-id="msg.id">
+          <MessageBubble
+            :message="msg"
+            :is-own="msg.sender.id === currentUserId"
+          />
+        </div>
       </template>
     </div>
 

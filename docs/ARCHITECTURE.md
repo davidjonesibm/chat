@@ -587,6 +587,12 @@ gantt
     API route tests (Fastify)                  :p6c, after p6b, 4d
     WebSocket message tests                     :p6d, after p6c, 3d
     E2E (critical user flows)                  :p6e, after p6d, 5d
+
+    section Phase 7 — Groups Navigation Redesign
+    Dedicated group selection view/route        :p7a, after p6e, 3d
+    App shell group switcher (outside ChatView) :p7b, after p7a, 3d
+    Simplify ChannelSidebar to flat list        :p7c, after p7b, 3d
+    Router guard: require active group context  :p7d, after p7c, 2d
 ```
 
 ### 9.2 Phase Detail
@@ -662,6 +668,17 @@ gantt
 | E2E       | Critical user flows (register → chat → push) | Playwright                       |
 
 **Exit Criteria**: Comprehensive test coverage; all CI checks pass.
+
+#### Phase 7 — Groups Navigation Redesign
+
+| Task                    | Description                                                                                                                                   |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Group selection view    | Dedicated `GroupsView.vue` route for browsing and selecting a group; replaces in-chat group switching                                         |
+| App shell integration   | Group switcher lives outside `ChatView` (e.g. top-level nav or landing page); entering `ChatView` implies an active group is already selected |
+| Simplify ChannelSidebar | Remove group-switching collapsibles; `ChannelSidebar` becomes a flat channel list for the active group only                                   |
+| Router guard            | Navigation to `ChatView` requires an active group context (`channelStore.activeGroup`); redirects to group selection view if none is set      |
+
+**Exit Criteria**: Group selection is fully external to `ChatView`; `ChannelSidebar` renders a flat channel list with no group collapsibles; the current bug where collapsibles stay open showing "Add Channel"/"Add Member" without an active group is eliminated.
 
 ---
 

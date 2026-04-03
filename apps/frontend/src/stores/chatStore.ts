@@ -14,6 +14,7 @@ export const useChatStore = defineStore('chat', () => {
   const reconnectAttempt = ref(0);
 
   // Pagination & scroll tracking
+  const highlightedMessageId = ref<string | null>(null);
   const hasMore = ref(true);
   const nextCursor = ref<string | null>(null);
   const loadingMore = ref(false);
@@ -73,6 +74,7 @@ export const useChatStore = defineStore('chat', () => {
     connected,
     reconnecting,
     reconnectAttempt,
+    highlightedMessageId,
     hasMore,
     nextCursor,
     loadingMore,

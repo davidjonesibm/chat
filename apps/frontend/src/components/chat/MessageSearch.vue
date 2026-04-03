@@ -10,7 +10,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
-  'navigate-to-message': [channelId: string];
+  'navigate-to-message': [channelId: string, messageId: string];
 }>();
 
 const channelStore = useChannelStore();
@@ -68,8 +68,8 @@ function handleToggleScope() {
   }
 }
 
-function handleResultClick(channelId: string) {
-  emit('navigate-to-message', channelId);
+function handleResultClick(channelId: string, messageId: string) {
+  emit('navigate-to-message', channelId, messageId);
 }
 
 function handleKeydown(event: KeyboardEvent) {
@@ -208,7 +208,7 @@ onUnmounted(() => {
             :key="msg.id"
             role="listitem"
             class="w-full text-left px-3 py-2 hover:bg-base-200 transition-colors border-b border-base-200 cursor-pointer"
-            @click="handleResultClick(msg.channel)"
+            @click="handleResultClick(msg.channel, msg.id)"
           >
             <div class="flex items-baseline justify-between gap-2">
               <span class="font-semibold text-sm truncate">{{

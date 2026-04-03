@@ -27,6 +27,6 @@ export async function app(fastify: FastifyInstance) {
   fastify.register(groupRoutes, { prefix: '/groups' });
   fastify.register(channelRoutes, { prefix: '/channels' });
   fastify.register(pushRoutes, { prefix: '/push' });
-  fastify.register(searchRoutes, { prefix: '/api/search' });
+  fastify.register(searchRoutes, { prefix: '/search' });
   fastify.register(rootRoutes);
 }
