@@ -89,16 +89,33 @@ onUnmounted(() => {
   }
 });
 
+async function handleDeleteAvatar() {
+  loading.value = true;
+  error.value = null;
+  try {
+    await authStore.deleteAvatar();
+    currentAvatarUrl.value = null;
+    selectedFile.value = null;
+    if (previewUrl.value) {
+      URL.revokeObjectURL(previewUrl.value);
+      previewUrl.value = null;
+    }
+  } catch (err) {
+    error.value =
+      err instanceof Error ? err.message : 'Failed to remove avatar';
+  } finally {
+    loading.value = false;
+  }
+}
+
 async function handleSubmit() {
   loading.value = true;
   error.value = null;
 
   try {
-    let avatarUrl: string | undefined;
-
-    // Upload avatar first if a new file was selected
+    // Upload avatar first if a new file was selected (updates store directly)
     if (selectedFile.value) {
-      avatarUrl = await authStore.uploadAvatar(selectedFile.value);
+      await authStore.uploadAvatar(selectedFile.value);
     }
 
     // Build profile update payload
@@ -111,9 +128,6 @@ async function handleSubmit() {
     }
     if (displayName.value.trim()) {
       payload.name = displayName.value.trim();
-    }
-    if (avatarUrl) {
-      payload.avatar = avatarUrl;
     }
 
     // Only call update if there's something to update
@@ -161,6 +175,15 @@ async function handleSubmit() {
             <p class="text-xs text-center mt-1 text-base-content/60">
               Click to change
             </p>
+            <button
+              v-if="currentAvatarUrl && !previewUrl"
+              type="button"
+              class="btn btn-xs btn-error mt-1"
+              :disabled="loading"
+              @click.stop="handleDeleteAvatar"
+            >
+              Remove
+            </button>
           </div>
           <input
             ref="fileInput"

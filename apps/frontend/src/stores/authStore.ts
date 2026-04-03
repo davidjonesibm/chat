@@ -51,7 +51,7 @@ export const useAuthStore = defineStore('auth', () => {
           id: authData.user.id,
           email: authData.user.email,
           username: authData.user.user_metadata?.username ?? data.username,
-          avatar: authData.user.user_metadata?.avatar ?? '',
+          avatar: (authData.user.user_metadata?.avatar as string) || '',
           created_at: authData.user.created_at ?? new Date().toISOString(),
           updated_at: authData.user.updated_at ?? new Date().toISOString(),
         };
@@ -85,7 +85,7 @@ export const useAuthStore = defineStore('auth', () => {
         id: authData.user.id,
         email: authData.user.email,
         username: authData.user.user_metadata?.username ?? '',
-        avatar: authData.user.user_metadata?.avatar ?? '',
+        avatar: (authData.user.user_metadata?.avatar as string) || '',
         created_at: authData.user.created_at ?? '',
         updated_at: authData.user.updated_at ?? '',
       };
@@ -124,7 +124,7 @@ export const useAuthStore = defineStore('auth', () => {
           id: session.user.id,
           email: session.user.email,
           username: session.user.user_metadata?.username ?? '',
-          avatar: session.user.user_metadata?.avatar ?? '',
+          avatar: (session.user.user_metadata?.avatar as string) || '',
           created_at: session.user.created_at ?? '',
           updated_at: session.user.updated_at ?? '',
         };
@@ -140,7 +140,7 @@ export const useAuthStore = defineStore('auth', () => {
             id: session.user.id,
             email: session.user.email,
             username: session.user.user_metadata?.username ?? '',
-            avatar: session.user.user_metadata?.avatar ?? '',
+            avatar: (session.user.user_metadata?.avatar as string) || '',
             created_at: session.user.created_at ?? '',
             updated_at: session.user.updated_at ?? '',
           };
@@ -189,7 +189,20 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     const data = (await response.json()) as AvatarUploadResponse;
+    if (user.value) {
+      user.value = { ...user.value, avatar: data.url };
+    }
     return data.url;
+  };
+
+  const deleteAvatar = async (): Promise<void> => {
+    const response = await apiFetch<UpdateProfileResponse>(
+      `${baseUrl}/api/auth/avatar`,
+      {
+        method: 'DELETE',
+      },
+    );
+    user.value = response.user;
   };
 
   return {
@@ -204,5 +217,6 @@ export const useAuthStore = defineStore('auth', () => {
     initAuth,
     updateProfile,
     uploadAvatar,
+    deleteAvatar,
   };
 });

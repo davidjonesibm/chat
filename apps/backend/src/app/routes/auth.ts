@@ -256,7 +256,7 @@ export default async function (fastify: FastifyInstance) {
         },
       },
     },
-    async (request, reply) => {
+    async (request) => {
       const user = requireUser(request);
       const { username, name, avatar } = request.body;
 
@@ -347,7 +347,7 @@ export default async function (fastify: FastifyInstance) {
         },
       },
     },
-    async (request, reply) => {
+    async (request) => {
       const user = requireUser(request);
 
       const file = await request.file();
@@ -423,6 +423,87 @@ export default async function (fastify: FastifyInstance) {
       }
 
       return { url: publicUrl };
+    },
+  );
+
+  /**
+   * DELETE /api/auth/avatar
+   * Delete current user's avatar (protected route)
+   */
+  fastify.delete(
+    '/avatar',
+    {
+      preHandler: [fastify.authenticate],
+      schema: {
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              user: { $ref: 'user#' },
+            },
+          },
+          401: { $ref: 'error#' },
+        },
+      },
+    },
+    async (request) => {
+      const user = requireUser(request);
+
+      // List all files in the user's avatar folder
+      const { data: files, error: listError } = await fastify.supabaseAdmin.storage
+        .from('avatars')
+        .list(user.id);
+
+      if (listError) {
+        fastify.log.error(listError, 'Failed to list avatar files');
+        throw fastify.httpErrors.internalServerError('Failed to delete avatar');
+      }
+
+      if (files && files.length > 0) {
+        const paths = files.map((f) => `${user.id}/${f.name}`);
+        const { error: removeError } = await fastify.supabaseAdmin.storage
+          .from('avatars')
+          .remove(paths);
+
+        if (removeError) {
+          fastify.log.error(removeError, 'Failed to remove avatar files');
+          throw fastify.httpErrors.internalServerError('Failed to delete avatar');
+        }
+      }
+
+      // Update profiles table
+      const { data: profile, error: profileError } = await fastify.supabaseAdmin
+        .from('profiles')
+        .update({ avatar: '' })
+        .eq('id', user.id)
+        .select('*')
+        .single();
+
+      if (profileError) {
+        fastify.log.error(profileError, 'Profile avatar clear failed');
+        throw fastify.httpErrors.internalServerError('Failed to update profile');
+      }
+
+      // Sync auth.users metadata
+      const { error: authError } =
+        await fastify.supabaseAdmin.auth.admin.updateUserById(user.id, {
+          user_metadata: { avatar: '' },
+        });
+
+      if (authError) {
+        fastify.log.error(authError, 'User metadata avatar clear failed');
+      }
+
+      return {
+        user: {
+          id: profile.id,
+          email: user.email,
+          username: profile.username || '',
+          avatar: '',
+          created_at: profile.created_at,
+          updated_at: profile.updated_at,
+        },
+      };
     },
   );
 }
