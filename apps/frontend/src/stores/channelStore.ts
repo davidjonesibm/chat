@@ -18,6 +18,7 @@ export const useChannelStore = defineStore('channel', () => {
   const currentGroupId = ref<string | null>(null);
   const currentChannelId = ref<string | null>(null);
   const loading = ref(false);
+  const groupsLastFetched = ref<number | null>(null);
   const memberProfiles = ref<
     Record<
       string,
@@ -43,9 +44,18 @@ export const useChannelStore = defineStore('channel', () => {
 
   // Actions
   async function fetchMyGroups(): Promise<void> {
+    const TTL_MS = 5 * 60 * 1000;
+    if (
+      groups.value.length > 0 &&
+      groupsLastFetched.value !== null &&
+      Date.now() - groupsLastFetched.value < TTL_MS
+    ) {
+      return;
+    }
     loading.value = true;
     try {
       groups.value = await apiFetch<Group[]>(`${baseUrl}/api/groups`);
+      groupsLastFetched.value = Date.now();
     } catch (err) {
       console.error('[ChannelStore] Failed to fetch groups:', err);
       throw err;

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, defineAsyncComponent } from 'vue';
+import { useRoute } from 'vue-router';
 import { useChannelStore } from '../stores/channelStore';
 import { useChatStore } from '../stores/chatStore';
 import { useChat } from '../composables/useChat';
@@ -9,9 +10,6 @@ import MessageList from '../components/chat/MessageList.vue';
 import MessageInput from '../components/chat/MessageInput.vue';
 import ConnectionStatus from '../components/ui/ConnectionStatus.vue';
 
-const CreateGroupModal = defineAsyncComponent(
-  () => import('../components/chat/CreateGroupModal.vue'),
-);
 const CreateChannelModal = defineAsyncComponent(
   () => import('../components/chat/CreateChannelModal.vue'),
 );
@@ -25,6 +23,7 @@ const ProfileModal = defineAsyncComponent(
   () => import('../components/chat/ProfileModal.vue'),
 );
 
+const route = useRoute();
 const channelStore = useChannelStore();
 const chatStore = useChatStore();
 const { connect, disconnect, sendMessage, switchChannel } = useChat();
@@ -36,26 +35,16 @@ const sidebarOpen = ref(false);
 const showSearch = ref(false);
 
 // Modal state
-const showCreateGroup = ref(false);
 const showCreateChannel = ref(false);
 const showAddMember = ref(false);
-const createChannelGroupId = ref('');
-const addMemberGroupId = ref('');
 const showProfile = ref(false);
 
-function handleCreateChannel(groupId: string) {
-  createChannelGroupId.value = groupId;
+function handleCreateChannel() {
   showCreateChannel.value = true;
 }
 
-function handleAddMember(groupId: string) {
-  addMemberGroupId.value = groupId;
+function handleAddMember() {
   showAddMember.value = true;
-}
-
-function handleGroupCreated() {
-  showCreateGroup.value = false;
-  // Group is auto-selected by the store
 }
 
 function handleChannelCreated() {
@@ -91,11 +80,20 @@ watch(
   },
 );
 
-onMounted(async () => {
-  await channelStore.fetchMyGroups();
-  if (channelStore.groups.length > 0) {
-    await channelStore.selectGroup(channelStore.groups[0].id);
-  }
+watch(
+  () => route.params.channelId,
+  async (newChannelId) => {
+    if (
+      newChannelId &&
+      typeof newChannelId === 'string' &&
+      newChannelId !== channelStore.currentChannelId
+    ) {
+      await channelStore.selectChannel(newChannelId);
+    }
+  },
+);
+
+onMounted(() => {
   connect();
 });
 
@@ -121,10 +119,10 @@ onUnmounted(() => {
       :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
     >
       <ChannelSidebar
-        @create-group="showCreateGroup = true"
         @create-channel="handleCreateChannel"
         @add-member="handleAddMember"
         @open-profile="showProfile = true"
+        @close="sidebarOpen = false"
       />
     </aside>
 
@@ -161,28 +159,24 @@ onUnmounted(() => {
       <template v-else>
         <div class="flex-1 flex items-center justify-center">
           <div class="text-center">
-            <h2 class="text-2xl font-bold mb-2">Welcome to Chat!</h2>
-            <p class="text-base-content/60 mb-4">
-              Create a group to get started
+            <h2 class="text-2xl font-bold mb-2">No channel selected</h2>
+            <p class="text-base-content/60">
+              Select a channel from the sidebar
             </p>
-            <button class="btn btn-primary" @click="showCreateGroup = true">
-              Create Group
-            </button>
           </div>
         </div>
       </template>
     </div>
 
     <!-- Modals -->
-    <CreateGroupModal v-model="showCreateGroup" @created="handleGroupCreated" />
     <CreateChannelModal
       v-model="showCreateChannel"
-      :group-id="createChannelGroupId"
+      :group-id="channelStore.currentGroupId!"
       @created="handleChannelCreated"
     />
     <AddMemberModal
       v-model="showAddMember"
-      :group-id="addMemberGroupId"
+      :group-id="channelStore.currentGroupId!"
       @added="handleMemberAdded"
     />
     <ProfileModal v-model="showProfile" />

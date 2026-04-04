@@ -4,28 +4,12 @@ declare const self: ServiceWorkerGlobalScope;
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { registerRoute } from 'workbox-routing';
 import { NetworkFirst } from 'workbox-strategies';
-import { CacheableResponsePlugin } from 'workbox-cacheable-response';
-import { ExpirationPlugin } from 'workbox-expiration';
 import { BackgroundSyncPlugin } from 'workbox-background-sync';
 import type { PushNotificationPayload } from '@chat/shared';
 
 // --- 1. Precache app shell ---
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
-
-// --- 2. Runtime cache: API responses (network-first) ---
-registerRoute(
-  ({ url }) =>
-    url.pathname.startsWith('/api/') && !url.pathname.includes('/push/'),
-  new NetworkFirst({
-    cacheName: 'api-cache',
-    networkTimeoutSeconds: 3,
-    plugins: [
-      new CacheableResponsePlugin({ statuses: [0, 200] }),
-      new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 5 * 60 }),
-    ],
-  }),
-);
 
 // --- 3. Background Sync for offline message POSTs ---
 const bgSyncPlugin = new BackgroundSyncPlugin('offlineMessageQueue', {

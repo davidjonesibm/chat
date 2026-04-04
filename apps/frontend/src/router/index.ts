@@ -1,8 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import type { RouteRecordRaw } from 'vue-router';
 import { useAuthStore } from '../stores/authStore';
+import { useChannelStore } from '../stores/channelStore';
 
 const ChatView = () => import('../views/ChatView.vue');
+const GroupsView = () => import('../views/GroupsView.vue');
 const LoginView = () => import('../views/LoginView.vue');
 const RegisterView = () => import('../views/RegisterView.vue');
 
@@ -21,8 +23,8 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/',
-    name: 'chat',
-    component: ChatView,
+    name: 'groups',
+    component: GroupsView,
     meta: { requiresAuth: true },
   },
   {
@@ -69,6 +71,33 @@ router.beforeEach(async (to, from, next) => {
   } else if (guestOnly && authStore.isAuthenticated) {
     // Route is guest-only but user is authenticated
     next('/');
+  } else if (to.name === 'group' || to.name === 'channel') {
+    // Group context guard: validate and load group context before ChatView mounts
+    const channelStore = useChannelStore();
+    const groupId = to.params.groupId as string;
+
+    if (channelStore.groups.length === 0) {
+      await channelStore.fetchMyGroups();
+    }
+
+    const groupExists = channelStore.groups.some((g) => g.id === groupId);
+    if (!groupExists) {
+      next('/');
+      return;
+    }
+
+    if (channelStore.currentGroupId !== groupId) {
+      await channelStore.selectGroup(groupId);
+    }
+
+    if (to.name === 'channel') {
+      const channelId = to.params.channelId as string;
+      if (channelStore.currentChannelId !== channelId) {
+        await channelStore.selectChannel(channelId);
+      }
+    }
+
+    next();
   } else {
     next();
   }

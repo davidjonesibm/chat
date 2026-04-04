@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useChannelStore } from '../../stores/channelStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -11,234 +11,129 @@ const channelStore = useChannelStore();
 const authStore = useAuthStore();
 
 const emit = defineEmits<{
-  'create-group': [];
-  'create-channel': [groupId: string];
-  'add-member': [groupId: string];
+  'create-channel': [];
+  'add-member': [];
   'open-profile': [];
+  close: [];
 }>();
 
-// Track which groups are expanded
-const expandedGroups = ref<Set<string>>(new Set());
+const focusedIndex = ref(0);
 
-// Keyboard navigation: track focused tree item index
-const focusedIndex = ref(-1);
-
-// Flat list of all visible tree items for keyboard navigation
-const treeItems = computed(() => {
-  const items: { type: 'group' | 'channel'; id: string; groupId?: string }[] =
-    [];
-  for (const group of channelStore.groups) {
-    items.push({ type: 'group', id: group.id });
-    if (expandedGroups.value.has(group.id)) {
-      for (const channel of getGroupChannels(group.id)) {
-        items.push({ type: 'channel', id: channel.id, groupId: group.id });
-      }
-    }
-  }
-  return items;
-});
-
-function handleTreeKeydown(e: KeyboardEvent) {
-  const items = treeItems.value;
+function handleListKeydown(e: KeyboardEvent) {
+  const items = channelStore.channels;
   if (items.length === 0) return;
 
   switch (e.key) {
     case 'ArrowDown':
       e.preventDefault();
       focusedIndex.value = Math.min(focusedIndex.value + 1, items.length - 1);
-      focusTreeItem();
+      focusItem();
       break;
     case 'ArrowUp':
       e.preventDefault();
       focusedIndex.value = Math.max(focusedIndex.value - 1, 0);
-      focusTreeItem();
+      focusItem();
       break;
-    case 'ArrowRight': {
-      e.preventDefault();
-      const item = items[focusedIndex.value];
-      if (item?.type === 'group' && !expandedGroups.value.has(item.id)) {
-        toggleGroup(item.id);
-      }
-      break;
-    }
-    case 'ArrowLeft': {
-      e.preventDefault();
-      const item = items[focusedIndex.value];
-      if (item?.type === 'group' && expandedGroups.value.has(item.id)) {
-        expandedGroups.value.delete(item.id);
-      } else if (item?.type === 'channel') {
-        // Move focus to parent group
-        const groupIdx = items.findIndex(
-          (i) => i.type === 'group' && i.id === item.groupId,
-        );
-        if (groupIdx !== -1) focusedIndex.value = groupIdx;
-        focusTreeItem();
-      }
-      break;
-    }
     case 'Enter':
-    case ' ': {
+    case ' ':
       e.preventDefault();
-      const item = items[focusedIndex.value];
-      if (item?.type === 'group') toggleGroup(item.id);
-      else if (item?.type === 'channel') handleSelectChannel(item.id);
+      if (items[focusedIndex.value]) {
+        handleSelectChannel(items[focusedIndex.value].id);
+      }
       break;
-    }
     case 'Home':
       e.preventDefault();
       focusedIndex.value = 0;
-      focusTreeItem();
+      focusItem();
       break;
     case 'End':
       e.preventDefault();
       focusedIndex.value = items.length - 1;
-      focusTreeItem();
+      focusItem();
       break;
   }
 }
 
-function focusTreeItem() {
+function focusItem() {
   const el = document.querySelector(
-    `[data-tree-index="${focusedIndex.value}"]`,
+    `[data-channel-index="${focusedIndex.value}"]`,
   ) as HTMLElement | null;
   el?.focus();
 }
 
-function getTreeIndex(type: 'group' | 'channel', id: string) {
-  return treeItems.value.findIndex((i) => i.type === type && i.id === id);
-}
-
-function toggleGroup(groupId: string) {
-  if (expandedGroups.value.has(groupId)) {
-    expandedGroups.value.delete(groupId);
-  } else {
-    expandedGroups.value.add(groupId);
-    // Auto-fetch channels when expanding
-    channelStore.selectGroup(groupId);
-  }
-}
-
 function handleSelectChannel(channelId: string) {
   channelStore.selectChannel(channelId);
+  router.push(`/g/${channelStore.currentGroupId}/c/${channelId}`);
+  emit('close');
 }
 
 function handleLogout() {
   authStore.logout();
   router.push('/login');
 }
-
-function getGroupChannels(groupId: string) {
-  return channelStore.channels.filter((c) => c.group === groupId);
-}
 </script>
 
 <template>
   <aside class="h-full bg-base-200 flex flex-col border-r border-base-300">
-    <!-- Header -->
-    <div class="p-4 border-b border-base-300">
-      <h1 class="text-xl font-bold flex items-center gap-2">
-        <span>💬</span>
-        <span>Chat App</span>
-      </h1>
-    </div>
-
-    <!-- Create Group Button -->
-    <div class="p-3">
+    <!-- Group Header -->
+    <div class="p-4 border-b border-base-300 flex items-center gap-2">
       <button
-        class="btn btn-primary btn-sm w-full"
-        aria-label="Create Group"
-        @click="emit('create-group')"
+        class="btn btn-ghost btn-xs gap-1 shrink-0"
+        aria-label="Back to groups"
+        @click="router.push('/')"
       >
-        <span>+</span>
-        Create Group
+        ← Groups
       </button>
+      <h2 class="text-lg font-bold truncate">
+        {{ channelStore.currentGroup?.name }}
+      </h2>
     </div>
 
-    <!-- Groups & Channels List -->
+    <!-- Flat Channel List -->
     <div
       class="flex-1 overflow-y-auto"
-      role="tree"
-      aria-label="Groups and channels"
-      @keydown="handleTreeKeydown"
+      role="listbox"
+      aria-label="Channels"
+      @keydown="handleListKeydown"
     >
       <div
-        v-for="group in channelStore.groups"
-        :key="group.id"
-        class="border-b border-base-300"
+        v-for="(channel, index) in channelStore.channels"
+        :key="channel.id"
+        role="option"
+        :aria-selected="channelStore.currentChannelId === channel.id"
+        :tabindex="index === focusedIndex ? 0 : -1"
+        :data-channel-index="index"
+        class="px-4 py-2 cursor-pointer transition-colors flex items-center gap-2"
+        :class="{
+          'active bg-primary text-primary-content':
+            channelStore.currentChannelId === channel.id,
+        }"
+        @click="handleSelectChannel(channel.id)"
+        @focus="focusedIndex = index"
       >
-        <!-- Group Header -->
-        <div
-          role="treeitem"
-          :aria-expanded="expandedGroups.has(group.id)"
-          :aria-label="group.name"
-          :tabindex="getTreeIndex('group', group.id) === focusedIndex ? 0 : -1"
-          :data-tree-index="getTreeIndex('group', group.id)"
-          class="flex items-center gap-2 p-3 hover:bg-base-300 cursor-pointer transition-colors"
-          :class="{
-            'bg-base-300': channelStore.currentGroupId === group.id,
-          }"
-          @click="toggleGroup(group.id)"
-          @focus="focusedIndex = getTreeIndex('group', group.id)"
-        >
-          <span class="text-sm">{{
-            expandedGroups.has(group.id) ? '▼' : '▶'
-          }}</span>
-          <span class="font-semibold flex-1 truncate">{{ group.name }}</span>
-        </div>
-
-        <!-- Channels (shown when expanded) -->
-        <div
-          v-if="expandedGroups.has(group.id)"
-          role="group"
-          class="bg-base-100"
-        >
-          <div
-            v-for="channel in getGroupChannels(group.id)"
-            :key="channel.id"
-            role="treeitem"
-            :aria-selected="channelStore.currentChannelId === channel.id"
-            :aria-label="channel.name"
-            :tabindex="
-              getTreeIndex('channel', channel.id) === focusedIndex ? 0 : -1
-            "
-            :data-tree-index="getTreeIndex('channel', channel.id)"
-            class="pl-8 pr-3 py-2 hover:bg-base-300 cursor-pointer transition-colors flex items-center gap-2"
-            :class="{
-              'bg-primary text-primary-content':
-                channelStore.currentChannelId === channel.id,
-            }"
-            @click="handleSelectChannel(channel.id)"
-            @focus="focusedIndex = getTreeIndex('channel', channel.id)"
-          >
-            <span class="text-base-content/70">#</span>
-            <span class="flex-1 truncate text-sm">{{ channel.name }}</span>
-          </div>
-
-          <!-- Add Channel Button -->
-          <div class="pl-8 pr-3 py-2">
-            <button
-              class="btn btn-ghost btn-xs text-xs w-full justify-start"
-              :aria-label="`Add Channel to ${group.name}`"
-              @click.stop="emit('create-channel', group.id)"
-            >
-              <span>+</span>
-              Add Channel
-            </button>
-          </div>
-
-          <!-- Add Member Button -->
-          <div class="pl-8 pr-3 py-2">
-            <button
-              class="btn btn-ghost btn-xs text-xs w-full justify-start"
-              :aria-label="`Add Member to ${group.name}`"
-              @click.stop="emit('add-member', group.id)"
-            >
-              <span>+</span>
-              Add Member
-            </button>
-          </div>
-        </div>
+        <span class="text-base-content/70">#</span>
+        <span class="flex-1 truncate text-sm">{{ channel.name }}</span>
       </div>
+    </div>
+
+    <!-- Add Channel / Add Member Buttons -->
+    <div class="p-3 border-t border-base-300 flex flex-col gap-1">
+      <button
+        class="btn btn-ghost btn-sm w-full justify-start"
+        aria-label="Add Channel"
+        @click="emit('create-channel')"
+      >
+        <span>+</span>
+        Add Channel
+      </button>
+      <button
+        class="btn btn-ghost btn-sm w-full justify-start"
+        aria-label="Add Member"
+        @click="emit('add-member')"
+      >
+        <span>+</span>
+        Add Member
+      </button>
     </div>
 
     <!-- Push Notifications Toggle -->

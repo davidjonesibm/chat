@@ -66,6 +66,9 @@ chat/
 │   │       │   └── supabase.ts              # Supabase anon client (auth only)
 │   │       ├── router/
 │   │       │   └── index.ts                 # Vue Router with auth guards
+│   │       ├── views/
+│   │       │   ├── ChatView.vue              # Main chat view (route-level)
+│   │       │   └── GroupsView.vue            # Group selection view (route-level)
 │   │       ├── service-worker.ts            # Custom SW (injectManifest)
 │   │       └── App.vue
 │   │
@@ -581,18 +584,18 @@ gantt
     Accessibility audit                        :p5d, after p5c, 3d
     Performance optimization                   :p5e, after p5d, 3d
 
-    section Phase 6 — Testing
-    Unit tests (composables, stores, utils)    :p6a, after p5e, 5d
-    Component tests (Vue)                      :p6b, after p6a, 5d
-    API route tests (Fastify)                  :p6c, after p6b, 4d
-    WebSocket message tests                     :p6d, after p6c, 3d
-    E2E (critical user flows)                  :p6e, after p6d, 5d
+    section Phase 6 — Groups Navigation Redesign
+    Dedicated group selection view/route        :p6a, after p5e, 3d
+    App shell group switcher (outside ChatView) :p6b, after p6a, 3d
+    Simplify ChannelSidebar to flat list        :p6c, after p6b, 3d
+    Router guard: require active group context  :p6d, after p6c, 2d
 
-    section Phase 7 — Groups Navigation Redesign
-    Dedicated group selection view/route        :p7a, after p6e, 3d
-    App shell group switcher (outside ChatView) :p7b, after p7a, 3d
-    Simplify ChannelSidebar to flat list        :p7c, after p7b, 3d
-    Router guard: require active group context  :p7d, after p7c, 2d
+    section Phase 7 — Testing
+    Unit tests (composables, stores, utils)    :p7a, after p6d, 5d
+    Component tests (Vue)                      :p7b, after p7a, 5d
+    API route tests (Fastify)                  :p7c, after p7b, 4d
+    WebSocket message tests                     :p7d, after p7c, 3d
+    E2E (critical user flows)                  :p7e, after p7d, 5d
 ```
 
 ### 9.2 Phase Detail
@@ -657,7 +660,18 @@ gantt
 
 **Exit Criteria**: Production-quality UX; accessible; performant.
 
-#### Phase 6 — Testing
+#### Phase 6 — Groups Navigation Redesign
+
+| Task                    | Description                                                                                                                                   |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Group selection view    | Dedicated `GroupsView.vue` route for browsing and selecting a group; replaces in-chat group switching                                         |
+| App shell integration   | Group switcher lives outside `ChatView` (e.g. top-level nav or landing page); entering `ChatView` implies an active group is already selected |
+| Simplify ChannelSidebar | Remove group-switching collapsibles; `ChannelSidebar` becomes a flat channel list for the active group only                                   |
+| Router guard            | Navigation to `ChatView` requires an active group context (`channelStore.activeGroup`); redirects to group selection view if none is set      |
+
+**Exit Criteria**: Group selection is fully external to `ChatView`; `ChannelSidebar` renders a flat channel list with no group collapsibles; the current bug where collapsibles stay open showing "Add Channel"/"Add Member" without an active group is eliminated.
+
+#### Phase 7 — Testing
 
 | Layer     | Scope                                        | Tools                            |
 | --------- | -------------------------------------------- | -------------------------------- |
@@ -668,17 +682,6 @@ gantt
 | E2E       | Critical user flows (register → chat → push) | Playwright                       |
 
 **Exit Criteria**: Comprehensive test coverage; all CI checks pass.
-
-#### Phase 7 — Groups Navigation Redesign
-
-| Task                    | Description                                                                                                                                   |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Group selection view    | Dedicated `GroupsView.vue` route for browsing and selecting a group; replaces in-chat group switching                                         |
-| App shell integration   | Group switcher lives outside `ChatView` (e.g. top-level nav or landing page); entering `ChatView` implies an active group is already selected |
-| Simplify ChannelSidebar | Remove group-switching collapsibles; `ChannelSidebar` becomes a flat channel list for the active group only                                   |
-| Router guard            | Navigation to `ChatView` requires an active group context (`channelStore.activeGroup`); redirects to group selection view if none is set      |
-
-**Exit Criteria**: Group selection is fully external to `ChatView`; `ChannelSidebar` renders a flat channel list with no group collapsibles; the current bug where collapsibles stay open showing "Add Channel"/"Add Member" without an active group is eliminated.
 
 ---
 
