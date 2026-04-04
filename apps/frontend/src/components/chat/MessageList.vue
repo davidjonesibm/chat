@@ -195,76 +195,79 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="relative flex-1 flex flex-col min-h-0 bg-base-100">
-    <!-- Scroll container -->
-    <div
-      role="log"
-      aria-live="polite"
-      aria-label="Message history"
-      class="flex-1 overflow-y-auto p-4 space-y-1"
-      ref="scrollContainer"
-      @scroll="handleScroll"
-    >
-      <!-- Top sentinel for infinite scroll -->
-      <div ref="topSentinel" class="h-1"></div>
-
-      <!-- Loading spinner at top during infinite scroll -->
-      <div v-if="loadingMore" class="flex justify-center py-2">
-        <span class="loading loading-spinner loading-sm"></span>
-      </div>
-
-      <!-- Initial loading state -->
-      <div v-if="loading" class="flex justify-center py-8">
-        <span class="loading loading-spinner loading-lg"></span>
-      </div>
-
-      <!-- Empty state -->
+  <div class="flex-1 flex flex-col min-h-0">
+    <div class="relative flex-1 flex flex-col min-h-0 bg-base-100">
+      <!-- Scroll container -->
       <div
-        v-else-if="messages.length === 0"
-        class="flex justify-center py-8 text-base-content/50"
+        role="log"
+        aria-live="polite"
+        aria-label="Message history"
+        class="flex-1 overflow-y-auto p-4 space-y-1"
+        ref="scrollContainer"
+        @scroll="handleScroll"
       >
-        No messages yet. Say something!
+        <!-- Top sentinel for infinite scroll -->
+        <div ref="topSentinel" class="h-1"></div>
+
+        <!-- Loading spinner at top during infinite scroll -->
+        <div v-if="loadingMore" class="flex justify-center py-2">
+          <span class="loading loading-spinner loading-sm"></span>
+        </div>
+
+        <!-- Initial loading state -->
+        <div v-if="loading" class="flex justify-center py-8">
+          <span class="loading loading-spinner loading-lg"></span>
+        </div>
+
+        <!-- Empty state -->
+        <div
+          v-else-if="messages.length === 0"
+          class="flex justify-center py-8 text-base-content/50"
+        >
+          No messages yet. Say something!
+        </div>
+
+        <!-- Messages -->
+        <template v-else>
+          <div v-for="msg in messages" :key="msg.id" :data-message-id="msg.id">
+            <MessageBubble
+              :message="msg"
+              :is-own="msg.sender.id === currentUserId"
+            />
+          </div>
+        </template>
       </div>
 
-      <!-- Messages -->
-      <template v-else>
-        <div v-for="msg in messages" :key="msg.id" :data-message-id="msg.id">
-          <MessageBubble
-            :message="msg"
-            :is-own="msg.sender.id === currentUserId"
-          />
-        </div>
-      </template>
-    </div>
-
-    <!-- "N new messages" banner -->
-    <div
-      v-if="unreadCount > 0"
-      class="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10"
-    >
-      <button
-        class="btn btn-sm btn-primary shadow-lg"
-        :aria-label="`${unreadCount} new ${unreadCount === 1 ? 'message' : 'messages'}, click to scroll down`"
-        @click="scrollToBottom(true)"
+      <!-- "N new messages" banner -->
+      <div
+        v-if="unreadCount > 0"
+        class="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-10"
       >
-        ↓ {{ unreadCount }} new {{ unreadCount === 1 ? 'message' : 'messages' }}
-      </button>
+        <button
+          class="btn btn-sm btn-primary shadow-lg"
+          :aria-label="`${unreadCount} new ${unreadCount === 1 ? 'message' : 'messages'}, click to scroll down`"
+          @click="scrollToBottom(true)"
+        >
+          ↓ {{ unreadCount }} new
+          {{ unreadCount === 1 ? 'message' : 'messages' }}
+        </button>
+      </div>
     </div>
-  </div>
 
-  <!-- Typing indicator -->
-  <div
-    v-if="typingUsers.length > 0"
-    role="status"
-    aria-live="polite"
-    class="px-4 py-1 text-sm text-base-content/50 italic bg-base-100"
-  >
-    {{ typingText }}
-    <span class="typing-dots ml-1">
-      <span class="dot"></span>
-      <span class="dot"></span>
-      <span class="dot"></span>
-    </span>
+    <!-- Typing indicator -->
+    <div
+      v-if="typingUsers.length > 0"
+      role="status"
+      aria-live="polite"
+      class="px-4 py-1 text-sm text-base-content/50 italic bg-base-100"
+    >
+      {{ typingText }}
+      <span class="typing-dots ml-1">
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+      </span>
+    </div>
   </div>
 </template>
 

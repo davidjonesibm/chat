@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import type { ClientMessage, ServerMessage } from '@chat/shared';
 import { useChatStore } from '../stores/chatStore';
 import { useAuthStore } from '../stores/authStore';
+import { useChannelStore } from '../stores/channelStore';
 import { enqueueMessage, flushQueue } from '../lib/offlineQueue';
 import { useToast } from './useToast';
 
@@ -44,6 +45,7 @@ export function useChat() {
   }
 
   function setupWebSocket(token: string) {
+    const channelStore = useChannelStore();
     const url = getWebSocketUrl(token);
     ws = new WebSocket(url);
 
@@ -95,6 +97,21 @@ export function useChat() {
 
           case 'presence:update':
             chatStore.onlineUsers = message.payload.users;
+            if (channelStore.currentGroupId) {
+              const missing = message.payload.users.filter(
+                (id) => !channelStore.memberProfiles[id],
+              );
+              if (missing.length > 0) {
+                channelStore
+                  .fetchGroupMembers(channelStore.currentGroupId)
+                  .catch((err) =>
+                    console.error(
+                      '[WebSocket] Failed to refresh member profiles:',
+                      err,
+                    ),
+                  );
+              }
+            }
             break;
 
           case 'channel:updated':
