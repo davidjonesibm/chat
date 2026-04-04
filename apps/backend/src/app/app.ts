@@ -7,6 +7,7 @@ import groupRoutes from './routes/groups';
 import channelRoutes from './routes/channels';
 import pushRoutes from './routes/push';
 import searchRoutes from './routes/search';
+import inviteRoutes from './routes/invites';
 import rootRoutes from './routes/root';
 import { registerSharedSchemas } from './schemas';
 
@@ -28,5 +29,6 @@ export async function app(fastify: FastifyInstance) {
   fastify.register(channelRoutes, { prefix: '/channels' });
   fastify.register(pushRoutes, { prefix: '/push' });
   fastify.register(searchRoutes, { prefix: '/search' });
+  fastify.register(inviteRoutes, { prefix: '/invites' });
   fastify.register(rootRoutes);
 }

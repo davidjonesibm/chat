@@ -13,8 +13,8 @@ import ConnectionStatus from '../components/ui/ConnectionStatus.vue';
 const CreateChannelModal = defineAsyncComponent(
   () => import('../components/chat/CreateChannelModal.vue'),
 );
-const AddMemberModal = defineAsyncComponent(
-  () => import('../components/chat/AddMemberModal.vue'),
+const InviteModal = defineAsyncComponent(
+  () => import('../components/chat/InviteModal.vue'),
 );
 const MessageSearch = defineAsyncComponent(
   () => import('../components/chat/MessageSearch.vue'),
@@ -36,23 +36,19 @@ const showSearch = ref(false);
 
 // Modal state
 const showCreateChannel = ref(false);
-const showAddMember = ref(false);
+const showInvite = ref(false);
 const showProfile = ref(false);
 
 function handleCreateChannel() {
   showCreateChannel.value = true;
 }
 
-function handleAddMember() {
-  showAddMember.value = true;
+function handleInvitePeople() {
+  showInvite.value = true;
 }
 
 function handleChannelCreated() {
   showCreateChannel.value = false;
-}
-
-function handleMemberAdded() {
-  showAddMember.value = false;
 }
 
 function handleSend(content: string) {
@@ -120,7 +116,7 @@ onUnmounted(() => {
     >
       <ChannelSidebar
         @create-channel="handleCreateChannel"
-        @add-member="handleAddMember"
+        @invite-people="handleInvitePeople"
         @open-profile="showProfile = true"
         @close="sidebarOpen = false"
       />
@@ -174,10 +170,10 @@ onUnmounted(() => {
       :group-id="channelStore.currentGroupId!"
       @created="handleChannelCreated"
     />
-    <AddMemberModal
-      v-model="showAddMember"
+    <InviteModal
+      v-if="showInvite"
       :group-id="channelStore.currentGroupId!"
-      @added="handleMemberAdded"
+      @close="showInvite = false"
     />
     <ProfileModal v-model="showProfile" />
   </div>

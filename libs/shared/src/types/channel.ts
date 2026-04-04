@@ -62,3 +62,51 @@ export interface CreateChannelRequest {
 export interface AddMemberRequest {
   userId: string;
 }
+
+// --- Group Invites ---
+export interface GroupInviteRecord extends BaseRecord {
+  token: string;
+  group_id: string;
+  created_by: string;
+  expires_at: string;
+  max_uses: number | null;
+  use_count: number;
+}
+
+export type GroupInvite = Pick<
+  GroupInviteRecord,
+  | 'id'
+  | 'token'
+  | 'group_id'
+  | 'created_by'
+  | 'expires_at'
+  | 'max_uses'
+  | 'use_count'
+  | 'created_at'
+  | 'updated_at'
+>;
+
+export interface CreateInviteRequest {
+  groupId: string;
+  expiresInHours?: number;
+  maxUses?: number | null;
+}
+
+export interface CreateInviteResponse {
+  invite: GroupInvite;
+}
+
+export interface InviteInfoResponse {
+  groupId: string;
+  groupName: string;
+  groupDescription: string;
+  memberCount: number;
+  inviterName: string;
+  expiresAt: string;
+  alreadyMember: boolean;
+}
+
+export interface JoinViaInviteResponse {
+  group: Group;
+  defaultChannel: Channel;
+}

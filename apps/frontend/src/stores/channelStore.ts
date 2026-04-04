@@ -5,6 +5,10 @@ import type {
   Channel,
   MessageWithSender,
   CursorPaginatedMessages,
+  GroupInvite,
+  CreateInviteResponse,
+  InviteInfoResponse,
+  JoinViaInviteResponse,
 } from '@chat/shared';
 import { useChatStore } from './chatStore';
 import { apiFetch } from '../lib/api';
@@ -266,6 +270,69 @@ export const useChannelStore = defineStore('channel', () => {
     }
   }
 
+  async function createInvite(
+    groupId: string,
+    opts?: { expiresInHours?: number; maxUses?: number | null },
+  ): Promise<CreateInviteResponse> {
+    try {
+      return await apiFetch<CreateInviteResponse>(`${baseUrl}/api/invites`, {
+        method: 'POST',
+        body: JSON.stringify({ groupId, ...opts }),
+      });
+    } catch (err) {
+      console.error('[ChannelStore] Failed to create invite:', err);
+      throw err;
+    }
+  }
+
+  async function listInvites(groupId: string): Promise<GroupInvite[]> {
+    try {
+      return await apiFetch<GroupInvite[]>(
+        `${baseUrl}/api/invites/group/${groupId}`,
+      );
+    } catch (err) {
+      console.error('[ChannelStore] Failed to list invites:', err);
+      throw err;
+    }
+  }
+
+  async function revokeInvite(token: string): Promise<void> {
+    try {
+      await apiFetch<void>(`${baseUrl}/api/invites/${token}`, {
+        method: 'DELETE',
+      });
+    } catch (err) {
+      console.error('[ChannelStore] Failed to revoke invite:', err);
+      throw err;
+    }
+  }
+
+  async function getInviteInfo(token: string): Promise<InviteInfoResponse> {
+    try {
+      return await apiFetch<InviteInfoResponse>(
+        `${baseUrl}/api/invites/${token}`,
+      );
+    } catch (err) {
+      console.error('[ChannelStore] Failed to get invite info:', err);
+      throw err;
+    }
+  }
+
+  async function joinViaInvite(token: string): Promise<JoinViaInviteResponse> {
+    try {
+      const data = await apiFetch<JoinViaInviteResponse>(
+        `${baseUrl}/api/invites/${token}/join`,
+        { method: 'POST' },
+      );
+      groups.value.push(data.group);
+      await selectGroup(data.group.id);
+      return data;
+    } catch (err) {
+      console.error('[ChannelStore] Failed to join via invite:', err);
+      throw err;
+    }
+  }
+
   return {
     // State
     groups,
@@ -289,5 +356,10 @@ export const useChannelStore = defineStore('channel', () => {
     fetchOlderMessages,
     fetchGroupMembers,
     addMember,
+    createInvite,
+    listInvites,
+    revokeInvite,
+    getInviteInfo,
+    joinViaInvite,
   };
 });

@@ -76,10 +76,27 @@ export const messageSchema = {
   },
 };
 
+export const groupInviteSchema = {
+  $id: 'groupInvite',
+  type: 'object' as const,
+  properties: {
+    id: { type: 'string' as const },
+    token: { type: 'string' as const },
+    group_id: { type: 'string' as const },
+    created_by: { type: 'string' as const },
+    expires_at: { type: 'string' as const },
+    max_uses: { type: ['integer', 'null'] as const },
+    use_count: { type: 'integer' as const },
+    created_at: { type: 'string' as const },
+    updated_at: { type: 'string' as const },
+  },
+};
+
 export function registerSharedSchemas(fastify: FastifyInstance) {
   fastify.addSchema(errorSchema);
   fastify.addSchema(userSchema);
   fastify.addSchema(groupSchema);
   fastify.addSchema(channelSchema);
   fastify.addSchema(messageSchema);
+  fastify.addSchema(groupInviteSchema);
 }

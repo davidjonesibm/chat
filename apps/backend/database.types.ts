@@ -122,6 +122,50 @@ export type Database = {
         };
         Relationships: [];
       };
+      group_invites: {
+        Row: {
+          id: string;
+          token: string;
+          group_id: string;
+          created_by: string;
+          expires_at: string;
+          max_uses: number | null;
+          use_count: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          token: string;
+          group_id: string;
+          created_by: string;
+          expires_at: string;
+          max_uses?: number | null;
+          use_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          token?: string;
+          group_id?: string;
+          created_by?: string;
+          expires_at?: string;
+          max_uses?: number | null;
+          use_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'group_invites_group_id_fkey';
+            columns: ['group_id'];
+            isOneToOne: false;
+            referencedRelation: 'groups';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       messages: {
         Row: {
           channel_id: string | null;

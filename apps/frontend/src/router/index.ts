@@ -5,6 +5,7 @@ import { useChannelStore } from '../stores/channelStore';
 
 const ChatView = () => import('../views/ChatView.vue');
 const GroupsView = () => import('../views/GroupsView.vue');
+const InviteView = () => import('../views/InviteView.vue');
 const LoginView = () => import('../views/LoginView.vue');
 const RegisterView = () => import('../views/RegisterView.vue');
 
@@ -40,6 +41,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/invite/:token',
+    name: 'invite',
+    component: InviteView,
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/:pathMatch(.*)*',
     redirect: '/',
   },
@@ -66,7 +73,8 @@ router.beforeEach(async (to, from, next) => {
   const guestOnly = to.matched.some((record) => record.meta.guestOnly);
 
   if (requiresAuth && !authStore.isAuthenticated) {
-    // Route requires auth but user is not authenticated
+    // Save intended destination for post-login redirect
+    sessionStorage.setItem('postLoginRedirect', to.fullPath);
     next('/login');
   } else if (guestOnly && authStore.isAuthenticated) {
     // Route is guest-only but user is authenticated

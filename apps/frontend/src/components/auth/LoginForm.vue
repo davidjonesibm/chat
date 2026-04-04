@@ -17,7 +17,9 @@ const handleSubmit = async () => {
       password: password.value,
     };
     await login(data);
-    router.push('/');
+    const redirect = sessionStorage.getItem('postLoginRedirect');
+    sessionStorage.removeItem('postLoginRedirect');
+    router.push(redirect ?? '/');
   } catch (err) {
     // Error is handled by the store
   }
