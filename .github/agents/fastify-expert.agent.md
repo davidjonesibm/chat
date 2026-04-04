@@ -536,6 +536,16 @@ fastify.addHook('onClose', async (instance) => {
 - ❌ Loop through start → test → kill → restart cycles — hand off to the Test Writer agent or Code Reviewer instead
 - ✅ **DO** ask the user to run package installation commands (e.g., `pnpm add <package> --filter @chat/backend`) when a new dependency is needed — suggest the exact command but do not run it yourself
 
+### Database Types Rule (Critical)
+
+`fastify.supabaseAdmin` is typed as `SupabaseClient<Database>` where `Database` is defined in `apps/backend/database.types.ts`. Every Supabase table **must** be present in that file for `.from('table_name')` to be typed.
+
+**ANY time you write a SQL migration that creates a new table, you MUST update `database.types.ts` in the same change.** Add `Row`, `Insert`, `Update`, and `Relationships` entries following the pattern of the existing tables.
+
+- ❌ **NEVER** use `fastify.supabaseAdmin as any` or `const untypedAdmin = fastify.supabaseAdmin as any` to work around a missing table type
+- ❌ **NEVER** leave a `// NOTE: types not yet generated` comment as a placeholder — that comment is a bug, not a todo
+- ✅ **DO** update `database.types.ts` immediately when adding a migration — the types file is the fix, not a cast
+
 ## Quality Standards
 
 Every implementation must:

@@ -108,16 +108,31 @@ chat/
 
 ## 3. Data Model
 
+### 3.0 Database Types Contract
+
+**`apps/backend/database.types.ts` is the single source of truth for Supabase TypeScript types.** The `supabaseAdmin` client is typed as `SupabaseClient<Database>`, which means every table must be declared in `database.types.ts` for `.from('table_name')` to be fully typed.
+
+**Rule: every migration that creates a new table MUST be accompanied by a corresponding update to `database.types.ts` in the same commit/PR.** If a table is missing from this file, adding it is the fix — never use `as any` / `untypedAdmin` casts as a workaround.
+
+Each table entry requires three shapes:
+
+- `Row` — all columns non-optional (what you get back from SELECT)
+- `Insert` — columns with DB defaults are optional (what you pass to INSERT)
+- `Update` — all columns optional (what you pass to UPDATE)
+- `Relationships` — foreign key descriptors (follow the existing pattern)
+
 ### 3.1 Tables
 
-| Table           | Description                                                  |
-| --------------- | ------------------------------------------------------------ |
-| `auth.users`    | Supabase managed auth table (email, password hash, metadata) |
-| `profiles`      | Public user profile (extends `auth.users` via FK)            |
-| `groups`        | Slack-style workspace/team container                         |
-| `group_members` | Junction table linking users to groups (many-to-many)        |
-| `channels`      | Conversation channel within a group                          |
-| `messages`      | Individual chat messages                                     |
+| Table                | Description                                                  |
+| -------------------- | ------------------------------------------------------------ |
+| `auth.users`         | Supabase managed auth table (email, password hash, metadata) |
+| `profiles`           | Public user profile (extends `auth.users` via FK)            |
+| `groups`             | Slack-style workspace/team container                         |
+| `group_members`      | Junction table linking users to groups (many-to-many)        |
+| `channels`           | Conversation channel within a group                          |
+| `messages`           | Individual chat messages                                     |
+| `push_subscriptions` | Web Push API subscription objects per user                   |
+| `group_invites`      | Pending group invitations                                    |
 
 ### 3.2 Schema Detail
 

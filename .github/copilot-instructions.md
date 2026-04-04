@@ -64,6 +64,12 @@ applyTo: '**'
 | Route-level Vue component | `*View.vue`              | `ChatView.vue`         |
 | Fastify plugin            | `*Plugin`                | `authPlugin`           |
 
+## Database Types Contract
+
+`apps/backend/database.types.ts` is the hand-maintained Supabase type file. `supabaseAdmin` is typed as `SupabaseClient<Database>` — every table must have `Row`, `Insert`, `Update`, and `Relationships` entries in that file.
+
+**Every SQL migration that creates a new table MUST be accompanied by a corresponding addition to `database.types.ts`.** Never cast `supabaseAdmin as any` to work around a missing table type — adding the type is the fix.
+
 ## Do NOT
 
 - Query Supabase directly from the frontend (except auth).
@@ -72,3 +78,4 @@ applyTo: '**'
 - Add fields to `BaseRecord` — it is a fixed base interface.
 - Send untyped JSON over WebSocket.
 - Bypass Fastify JSON Schema validation for user-supplied input.
+- Cast `supabaseAdmin as any` (or `untypedAdmin`) — update `database.types.ts` instead.

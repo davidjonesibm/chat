@@ -84,7 +84,7 @@ export function usePush() {
 
       subscribed.value = response.success;
       console.log('[Push] Subscribed successfully');
-      return data.success;
+      return response.success;
     } catch (error) {
       console.error('[Push] Subscribe error:', error);
       subscribed.value = false;

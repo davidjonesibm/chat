@@ -20,6 +20,7 @@ const authStore = useAuthStore();
 const showCreateGroup = ref(false);
 const showProfile = ref(false);
 const loading = ref(false);
+const loadingGroupId = ref<string | null>(null);
 
 async function loadGroups() {
   loading.value = true;
@@ -31,8 +32,12 @@ async function loadGroups() {
 }
 
 async function handleSelectGroup(groupId: string) {
-  await channelStore.selectGroup(groupId);
-  router.push(`/g/${groupId}`);
+  loadingGroupId.value = groupId;
+  try {
+    await router.push(`/g/${groupId}`);
+  } finally {
+    loadingGroupId.value = null;
+  }
 }
 
 function handleGroupCreated() {
@@ -139,10 +144,18 @@ onMounted(() => {
             v-for="group in channelStore.groups"
             :key="group.id"
             class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer text-left"
+            :disabled="loadingGroupId !== null"
             @click="handleSelectGroup(group.id)"
           >
             <div class="card-body p-5">
-              <h2 class="card-title text-base">{{ group.name }}</h2>
+              <div class="flex items-center justify-between gap-2">
+                <h2 class="card-title text-base">{{ group.name }}</h2>
+                <span
+                  v-if="loadingGroupId === group.id"
+                  class="loading loading-spinner loading-sm text-primary shrink-0"
+                  aria-label="Loading"
+                ></span>
+              </div>
               <p
                 v-if="group.description"
                 class="text-sm text-base-content/60 line-clamp-2"

@@ -59,8 +59,7 @@ export default defineConfig(async () => {
           open: true,
           gzipSize: true,
           brotliSize: true,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        }) as any,
+        }) as import('vite').Plugin,
       );
     } catch {
       // rollup-plugin-visualizer not installed, skip

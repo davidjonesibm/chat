@@ -113,9 +113,7 @@ export default async function (fastify: FastifyInstance) {
       const { subscription } = request.body;
 
       // Upsert push subscription
-      // NOTE: push_subscriptions types not yet generated - using type assertion
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (fastify.supabaseAdmin as any)
+      const { error } = await fastify.supabaseAdmin
         .from('push_subscriptions')
         .upsert(
           {
@@ -190,9 +188,7 @@ export default async function (fastify: FastifyInstance) {
       const { endpoint } = request.body;
 
       // Delete push subscription
-      // NOTE: push_subscriptions types not yet generated - using type assertion
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await (fastify.supabaseAdmin as any)
+      const { error } = await fastify.supabaseAdmin
         .from('push_subscriptions')
         .delete()
         .eq('user_id', userId)

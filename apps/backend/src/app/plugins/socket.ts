@@ -28,11 +28,7 @@ export default fp(
         }
 
         // Fetch all push subscriptions for this user
-        // NOTE: push_subscriptions types not yet generated - using type assertion
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { data: subscriptions, error } = await (
-          fastify.supabaseAdmin as any
-        )
+        const { data: subscriptions, error } = await fastify.supabaseAdmin
           .from('push_subscriptions')
           .select('id, endpoint, keys_p256dh, keys_auth')
           .eq('user_id', userId);
@@ -70,9 +66,14 @@ export default fp(
               { userId, endpoint: sub.endpoint },
               'Push notification sent',
             );
-          } catch (err: any) {
+          } catch (err) {
             // Handle expired/invalid subscriptions (HTTP 410 Gone)
-            if (err?.statusCode === 410) {
+            const pushErr = err as {
+              statusCode?: number;
+              body?: string;
+              message?: string;
+            };
+            if (pushErr.statusCode === 410) {
               fastify.log.info(
                 { userId, endpoint: sub.endpoint },
                 'Removing expired push subscription',
@@ -80,8 +81,7 @@ export default fp(
 
               // Delete the expired subscription
               try {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                await (fastify.supabaseAdmin as any)
+                await fastify.supabaseAdmin
                   .from('push_subscriptions')
                   .delete()
                   .eq('id', sub.id);
@@ -96,9 +96,9 @@ export default fp(
                 {
                   userId,
                   endpoint: sub.endpoint,
-                  statusCode: err?.statusCode,
-                  errorBody: err?.body,
-                  errorMessage: err?.message,
+                  statusCode: pushErr.statusCode,
+                  errorBody: pushErr.body,
+                  errorMessage: pushErr.message,
                 },
                 'Failed to send push notification',
               );

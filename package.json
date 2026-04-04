@@ -11,6 +11,7 @@
     "build:backend": "pnpm --filter @chat/backend build",
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",
+    "format": "prettier --write .",
     "test": "pnpm -r run test",
     "analyze": "ANALYZE=true pnpm --filter @chat/frontend build"
   },
