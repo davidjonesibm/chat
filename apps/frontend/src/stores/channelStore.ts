@@ -133,11 +133,8 @@ export const useChannelStore = defineStore('channel', () => {
   async function selectGroup(groupId: string): Promise<void> {
     currentGroupId.value = groupId;
 
-    // Fetch channels for this group
-    await fetchChannels(groupId);
-
-    // Fetch member profiles for this group
-    await fetchGroupMembers(groupId);
+    // Fetch channels and member profiles in parallel
+    await Promise.all([fetchChannels(groupId), fetchGroupMembers(groupId)]);
 
     // Auto-select default channel or first channel
     const channelToSelect = defaultChannel.value || channels.value[0];
