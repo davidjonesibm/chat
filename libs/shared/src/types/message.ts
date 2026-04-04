@@ -53,5 +53,4 @@ export interface MessageSearchRequest {
   limit?: number;
 }
 
-export interface MessageSearchResponse
-  extends CursorPaginatedResponse<MessageWithSender> {}
+export interface MessageSearchResponse extends CursorPaginatedResponse<MessageWithSender> {}

@@ -450,9 +450,8 @@ export default async function (fastify: FastifyInstance) {
       const user = requireUser(request);
 
       // List all files in the user's avatar folder
-      const { data: files, error: listError } = await fastify.supabaseAdmin.storage
-        .from('avatars')
-        .list(user.id);
+      const { data: files, error: listError } =
+        await fastify.supabaseAdmin.storage.from('avatars').list(user.id);
 
       if (listError) {
         fastify.log.error(listError, 'Failed to list avatar files');
@@ -467,7 +466,9 @@ export default async function (fastify: FastifyInstance) {
 
         if (removeError) {
           fastify.log.error(removeError, 'Failed to remove avatar files');
-          throw fastify.httpErrors.internalServerError('Failed to delete avatar');
+          throw fastify.httpErrors.internalServerError(
+            'Failed to delete avatar',
+          );
         }
       }
 
@@ -481,7 +482,9 @@ export default async function (fastify: FastifyInstance) {
 
       if (profileError) {
         fastify.log.error(profileError, 'Profile avatar clear failed');
-        throw fastify.httpErrors.internalServerError('Failed to update profile');
+        throw fastify.httpErrors.internalServerError(
+          'Failed to update profile',
+        );
       }
 
       // Sync auth.users metadata

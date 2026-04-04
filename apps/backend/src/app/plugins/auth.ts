@@ -24,7 +24,10 @@ export async function authenticate(
   }
 
   // Verify token using Supabase's built-in verification
-  const { data: { user }, error } = await request.server.supabaseAdmin.auth.getUser(token);
+  const {
+    data: { user },
+    error,
+  } = await request.server.supabaseAdmin.auth.getUser(token);
   if (error || !user) {
     throw reply.unauthorized('Invalid or expired token');
   }
@@ -33,7 +36,11 @@ export async function authenticate(
   const userObj: User = {
     id: user.id,
     email: user.email || '',
-    username: (user.user_metadata?.username as string) || (user.user_metadata?.name as string) || user.email?.split('@')[0] || '',
+    username:
+      (user.user_metadata?.username as string) ||
+      (user.user_metadata?.name as string) ||
+      user.email?.split('@')[0] ||
+      '',
     avatar: (user.user_metadata?.avatar as string) || '',
     created_at: user.created_at,
     updated_at: user.updated_at || user.created_at,
