@@ -16,3 +16,4 @@ pocketbase/pocketbase
 pocketbase/pb_data/
 
 dist
+tmp
