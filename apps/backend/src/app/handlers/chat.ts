@@ -606,11 +606,12 @@ function handleDisconnect(ws: WebSocket, user: WsUser): void {
       // Clean up socket channels tracking
       socketChannels.delete(ws);
     }
-
-    // Clean up user tracking
-    socketUsers.delete(ws);
   } catch (err) {
     console.error('[disconnect] Error:', err);
+  } finally {
+    // Clean up user tracking
+    socketUsers.delete(ws);
+    socketChannels.delete(ws);
   }
 }
 

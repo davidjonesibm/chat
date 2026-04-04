@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useChatStore } from '../../stores/chatStore';
 
@@ -7,6 +7,22 @@ const chatStore = useChatStore();
 const { connected, reconnecting, reconnectAttempt } = storeToRefs(chatStore);
 
 const isOnline = ref(navigator.onLine);
+const showReconnecting = ref(false);
+let reconnectBannerTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch([reconnecting, connected], ([isReconnecting, isConnected]) => {
+  if (isReconnecting && !isConnected) {
+    reconnectBannerTimer = setTimeout(() => {
+      showReconnecting.value = true;
+    }, 2000);
+  } else {
+    if (reconnectBannerTimer) {
+      clearTimeout(reconnectBannerTimer);
+      reconnectBannerTimer = null;
+    }
+    showReconnecting.value = false;
+  }
+});
 
 function handleOnline() {
   isOnline.value = true;
@@ -24,6 +40,7 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('online', handleOnline);
   window.removeEventListener('offline', handleOffline);
+  if (reconnectBannerTimer) clearTimeout(reconnectBannerTimer);
 });
 </script>
 
@@ -45,7 +62,7 @@ onUnmounted(() => {
       <span>You're offline. Messages will be queued.</span>
     </div>
     <div
-      v-else-if="reconnecting && !connected"
+      v-else-if="showReconnecting"
       class="alert alert-warning rounded-none gap-2 py-2"
     >
       <span class="loading loading-spinner loading-sm"></span>

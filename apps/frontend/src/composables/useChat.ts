@@ -164,7 +164,6 @@ export function useChat() {
 
     ws.onerror = (event) => {
       error.value = 'WebSocket connection error';
-      useToast().addToast('error', 'Connection error');
       console.error('[WebSocket] Error:', event);
     };
   }
