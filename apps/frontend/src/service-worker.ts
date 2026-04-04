@@ -63,17 +63,23 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     self.clients
       .matchAll({ type: 'window', includeUncontrolled: true })
-      .then((clientList) => {
+      .then(async (clientList) => {
         // Focus existing tab if found
         for (const client of clientList) {
           if (new URL(client.url).origin === self.location.origin) {
-            client.focus();
-            (client as WindowClient).navigate(urlPath);
+            if (new URL(client.url).pathname === urlPath) {
+              // Already at the target URL — just focus
+              await client.focus();
+              return;
+            }
+            // SPA navigate via postMessage to avoid full page reload
+            await client.focus();
+            client.postMessage({ type: 'NAVIGATE', url: urlPath });
             return;
           }
         }
         // Open new window
-        return self.clients.openWindow(urlPath);
+        await self.clients.openWindow(urlPath);
       }),
   );
 });
