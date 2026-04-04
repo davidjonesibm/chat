@@ -27,9 +27,6 @@ const TYPING_DEBOUNCE_MS = 2000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 const RECONNECT_DELAYS = [1000, 2000, 4000, 8000, 30000]; // exponential backoff with max 30s
 
-// Track whether the first connection has been established
-let hasConnectedOnce = false;
-
 export function useChat() {
   const chatStore = useChatStore();
   const authStore = useAuthStore();
@@ -57,12 +54,6 @@ export function useChat() {
       error.value = null;
       reconnectAttempts = 0;
       console.log('[WebSocket] Connected');
-
-      // Show toast only on reconnection, not the first connect
-      if (hasConnectedOnce) {
-        useToast().addToast('success', 'Connected to chat');
-      }
-      hasConnectedOnce = true;
 
       // Flush offline message queue
       flushQueue((channelId, content) => {
