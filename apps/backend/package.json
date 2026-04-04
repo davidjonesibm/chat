@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "serve": "tsx watch --env-file .env src/main.ts",
-    "build": "tsc --noEmit && esbuild src/main.ts --bundle --platform=node --outdir=../../dist/apps/backend --sourcemap --format=cjs --packages=external",
+    "build": "tsc --noEmit && esbuild src/main.ts --bundle --platform=node --outdir=../../dist/apps/backend --sourcemap --format=cjs",
     "lint": "eslint .",
     "db-start": "supabase start",
     "db-stop": "supabase stop"
