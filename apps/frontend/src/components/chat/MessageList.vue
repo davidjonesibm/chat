@@ -5,12 +5,25 @@ import { useChatStore } from '../../stores/chatStore';
 import { useChannelStore } from '../../stores/channelStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useChat } from '../../composables/useChat';
+import { useMessageActions } from '../../composables/useMessageActions';
 import MessageBubble from './MessageBubble.vue';
+import MessageActionSheet from './MessageActionSheet.vue';
 
 const chatStore = useChatStore();
 const channelStore = useChannelStore();
 const authStore = useAuthStore();
 const { toggleReaction } = useChat();
+const {
+  activeMessage,
+  isOpen,
+  showFullPicker,
+  isMobile,
+  open: openActionSheet,
+  close: closeActionSheet,
+  copyMessage,
+  shareMessage,
+  reply,
+} = useMessageActions();
 
 const {
   messages,
@@ -27,8 +40,63 @@ const { user } = storeToRefs(authStore);
 const scrollContainer = ref<HTMLElement | null>(null);
 const topSentinel = ref<HTMLElement | null>(null);
 const isNearBottom = ref(true);
-const currentUserId = ref(user.value?.id);
 const isPrepending = ref(false);
+
+// Compute Slack-style sender grouping metadata for each message
+function formatDateLabel(date: Date): string {
+  const now = new Date();
+  const today = now.toDateString();
+  const yesterday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() - 1,
+  ).toDateString();
+  const ds = date.toDateString();
+  if (ds === today) return 'Today';
+  if (ds === yesterday) return 'Yesterday';
+  const sameYear = date.getFullYear() === now.getFullYear();
+  const options: Intl.DateTimeFormatOptions = sameYear
+    ? { weekday: 'short', month: 'short', day: 'numeric' }
+    : { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' };
+  return date.toLocaleDateString('en-US', options);
+}
+
+const messageMetadata = computed(() => {
+  const meta: Record<
+    string,
+    { isNewSender: boolean; dateLabel: string | null }
+  > = {};
+  let lastHumanSenderId: string | null = null;
+  let lastHumanMessageTime: number | null = null;
+  let lastDateString: string | null = null;
+  const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+  for (const msg of messages.value) {
+    const msgDate = new Date(msg.created_at);
+    const msgDateString = msgDate.toDateString();
+    const dateLabel =
+      msgDateString !== lastDateString ? formatDateLabel(msgDate) : null;
+    lastDateString = msgDateString;
+
+    if (msg.type === 'system') {
+      meta[msg.id] = { isNewSender: false, dateLabel };
+      lastHumanSenderId = null;
+      lastHumanMessageTime = null;
+      continue;
+    }
+    const msgTime = msgDate.getTime();
+    const senderChanged = lastHumanSenderId !== msg.sender.id;
+    const timedOut =
+      lastHumanMessageTime !== null &&
+      msgTime - lastHumanMessageTime >= TIMEOUT_MS;
+    const isNewSender = senderChanged || timedOut;
+    meta[msg.id] = { isNewSender, dateLabel };
+    lastHumanSenderId = msg.sender.id;
+    lastHumanMessageTime = msgTime;
+  }
+
+  return meta;
+});
 
 const typingText = computed(() => {
   const count = typingUsers.value.length;
@@ -187,6 +255,11 @@ onMounted(() => {
   });
 });
 
+// Close mobile sheet on breakpoint change
+watch(isMobile, () => {
+  closeActionSheet();
+});
+
 // Cleanup on unmount
 onUnmounted(() => {
   if (topObserver) {
@@ -204,7 +277,7 @@ onUnmounted(() => {
         role="log"
         aria-live="polite"
         aria-label="Message history"
-        class="flex-1 overflow-y-auto p-4 space-y-1"
+        class="flex-1 overflow-y-auto py-2 space-y-1"
         ref="scrollContainer"
         @scroll="handleScroll"
       >
@@ -232,11 +305,19 @@ onUnmounted(() => {
         <!-- Messages -->
         <template v-else>
           <div v-for="msg in messages" :key="msg.id" :data-message-id="msg.id">
+            <div
+              v-if="messageMetadata[msg.id]?.dateLabel"
+              class="divider text-xs text-base-content/50 mx-4"
+            >
+              <span class="badge badge-sm badge-ghost font-normal">{{
+                messageMetadata[msg.id].dateLabel
+              }}</span>
+            </div>
             <MessageBubble
               :message="msg"
-              :is-own="msg.sender.id === currentUserId"
-              :current-user-id="currentUserId ?? ''"
+              :is-new-sender="messageMetadata[msg.id]?.isNewSender ?? true"
               @react="toggleReaction"
+              @open-actions="openActionSheet"
             />
           </div>
         </template>
@@ -272,6 +353,25 @@ onUnmounted(() => {
         <span class="dot"></span>
       </span>
     </div>
+
+    <!-- Mobile action sheet (one instance for all messages) -->
+    <MessageActionSheet
+      :message="activeMessage"
+      :show="isOpen && isMobile"
+      :is-mobile="true"
+      :show-full-picker="showFullPicker"
+      @react="
+        (emoji: string) => {
+          if (activeMessage) toggleReaction(activeMessage.id, emoji);
+          closeActionSheet();
+        }
+      "
+      @copy="copyMessage"
+      @share="shareMessage"
+      @reply="reply"
+      @toggle-full-picker="showFullPicker = !showFullPicker"
+      @close="closeActionSheet"
+    />
   </div>
 </template>
 
