@@ -35,6 +35,32 @@ const { connect, disconnect, sendMessage, sendGiphyMessage, switchChannel } =
 // Sidebar toggle (mobile)
 const sidebarOpen = ref(false);
 
+let touchStartX = 0;
+let touchStartY = 0;
+let isLeftZone = false;
+
+const MIN_SWIPE_DISTANCE = 50;
+
+function onTouchStart(e: TouchEvent) {
+  const touch = e.touches[0];
+  touchStartX = touch.clientX;
+  touchStartY = touch.clientY;
+  isLeftZone = touch.clientX <= window.innerWidth * 0.3;
+}
+
+function onTouchEnd(e: TouchEvent) {
+  const touch = e.changedTouches[0];
+  const dx = touch.clientX - touchStartX;
+  const dy = Math.abs(touch.clientY - touchStartY);
+  if (sidebarOpen.value) {
+    if (dx <= -MIN_SWIPE_DISTANCE && Math.abs(dx) > dy) {
+      sidebarOpen.value = false;
+    }
+  } else if (isLeftZone && dx >= MIN_SWIPE_DISTANCE && dx > dy) {
+    sidebarOpen.value = true;
+  }
+}
+
 // Search panel
 const showSearch = ref(false);
 
@@ -115,7 +141,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-screen flex overflow-hidden">
+  <div
+    class="h-screen flex overflow-hidden pb-[env(safe-area-inset-bottom,0px)]"
+    @touchstart.passive="onTouchStart"
+    @touchend.passive="onTouchEnd"
+  >
     <!-- Mobile sidebar overlay -->
     <div
       v-if="sidebarOpen"

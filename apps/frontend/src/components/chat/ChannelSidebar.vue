@@ -81,7 +81,9 @@ function handleLogout() {
 </script>
 
 <template>
-  <aside class="h-full bg-base-200 flex flex-col border-r border-base-300">
+  <aside
+    class="h-full bg-base-200 flex flex-col border-r border-base-300 pl-[env(safe-area-inset-left,0px)] pb-[env(safe-area-inset-bottom,0px)]"
+  >
     <!-- Group Header -->
     <div class="p-4 border-b border-base-300 flex items-center gap-2">
       <button

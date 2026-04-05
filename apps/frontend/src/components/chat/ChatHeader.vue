@@ -3,7 +3,6 @@ import { computed } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useChatStore } from '../../stores/chatStore';
 import { useChannelStore } from '../../stores/channelStore';
-import UserAvatar from '../ui/UserAvatar.vue';
 
 const emit = defineEmits<{
   'toggle-sidebar': [];
@@ -13,32 +12,8 @@ const emit = defineEmits<{
 const chatStore = useChatStore();
 const channelStore = useChannelStore();
 const { onlineUsers } = storeToRefs(chatStore);
-const { memberProfiles } = storeToRefs(channelStore);
 
 const onlineCount = computed(() => onlineUsers.value.length);
-
-// Map online user IDs to their profiles
-const onlineUserProfiles = computed(() => {
-  return onlineUsers.value
-    .map((userId) => memberProfiles.value[userId])
-    .filter(Boolean); // Filter out undefined profiles
-});
-
-// Limit to 5 visible avatars
-const MAX_VISIBLE_AVATARS = 5;
-const visibleOnlineUsers = computed(() =>
-  onlineUserProfiles.value.slice(0, MAX_VISIBLE_AVATARS),
-);
-
-const overflowCount = computed(() => {
-  const overflow = onlineUserProfiles.value.length - MAX_VISIBLE_AVATARS;
-  return overflow > 0 ? overflow : 0;
-});
-
-// Generate initials from username (first letter, uppercase)
-const getInitials = (username: string) => {
-  return username.charAt(0).toUpperCase();
-};
 
 const currentChannel = computed(() => channelStore.currentChannel);
 const currentGroup = computed(() => channelStore.currentGroup);
@@ -51,7 +26,9 @@ const groupName = computed(() => currentGroup.value?.name || '');
 
 <template>
   <div>
-    <header class="navbar bg-base-200 border-b border-base-300">
+    <header
+      class="navbar bg-base-200 border-b border-base-300 pt-[env(safe-area-inset-top,0px)]"
+    >
       <!-- Mobile hamburger menu -->
       <div class="flex-none lg:hidden">
         <button
@@ -110,30 +87,6 @@ const groupName = computed(() => currentGroup.value?.name || '');
             ></path>
           </svg>
         </button>
-      </div>
-
-      <!-- Online users avatars -->
-      <div v-if="onlineCount > 0" class="flex-none">
-        <div class="avatar-group -space-x-4" aria-label="Online users">
-          <div
-            v-for="user in visibleOnlineUsers"
-            :key="user.id"
-            class="avatar online"
-          >
-            <UserAvatar
-              :username="user.username"
-              :avatar-url="user.avatar"
-              size="sm"
-            />
-          </div>
-          <div v-if="overflowCount > 0" class="avatar placeholder">
-            <div
-              class="w-8 h-8 bg-base-300 text-base-content rounded-full flex items-center justify-center text-xs"
-            >
-              +{{ overflowCount }}
-            </div>
-          </div>
-        </div>
       </div>
     </header>
   </div>

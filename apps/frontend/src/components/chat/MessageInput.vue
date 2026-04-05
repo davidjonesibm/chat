@@ -60,7 +60,9 @@ function onBlur() {
 </script>
 
 <template>
-  <div class="border-t border-base-300 p-4">
+  <div
+    class="border-t border-base-300 p-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))]"
+  >
     <form @submit.prevent="handleSend" class="flex gap-2">
       <input
         v-model="messageText"

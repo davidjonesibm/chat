@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router';
 import { useChannelStore } from '../stores/channelStore';
 import { useAuthStore } from '../stores/authStore';
 import UserAvatar from '../components/ui/UserAvatar.vue';
-import PushToggle from '../components/chat/PushToggle.vue';
 
 const CreateGroupModal = defineAsyncComponent(
   () => import('../components/chat/CreateGroupModal.vue'),
@@ -59,7 +58,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-base-200 flex flex-col">
+  <div
+    class="min-h-screen bg-base-200 flex flex-col pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]"
+  >
     <!-- Top bar -->
     <header class="navbar bg-base-100 shadow-sm px-4">
       <div class="flex-1">
@@ -169,11 +170,6 @@ onMounted(() => {
           </button>
         </div>
       </template>
-
-      <!-- Push toggle -->
-      <div class="mt-8">
-        <PushToggle />
-      </div>
     </main>
 
     <!-- Modals -->

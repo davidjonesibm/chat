@@ -39,6 +39,9 @@ const highlighted = computed(
   () => touched.value || (!isMobile.value && hovered.value),
 );
 let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+let touchStartX = 0;
+let touchStartY = 0;
+const MOVE_THRESHOLD = 10;
 
 onUnmounted(() => {
   if (longPressTimer) clearTimeout(longPressTimer);
@@ -67,17 +70,32 @@ function onMouseLeave() {
 }
 
 // Long-press handlers for mobile
-function onTouchStart() {
+function onTouchStart(e: TouchEvent) {
   if (longPressTimer) {
     clearTimeout(longPressTimer);
     longPressTimer = null;
   }
+  const touch = e.touches[0];
+  touchStartX = touch.clientX;
+  touchStartY = touch.clientY;
   touched.value = true;
   longPressTimer = setTimeout(() => {
     touched.value = false;
     hovered.value = false;
     emit('open-actions', props.message);
   }, 500);
+}
+
+function onTouchMove(e: TouchEvent) {
+  if (!longPressTimer) return;
+  const touch = e.touches[0];
+  const dx = touch.clientX - touchStartX;
+  const dy = touch.clientY - touchStartY;
+  if (dx * dx + dy * dy > MOVE_THRESHOLD * MOVE_THRESHOLD) {
+    clearTimeout(longPressTimer);
+    longPressTimer = null;
+    touched.value = false;
+  }
 }
 
 function onTouchEnd() {
@@ -156,6 +174,7 @@ watch(isMobile, () => {
       @mouseenter="onMouseEnter"
       @mouseleave="onMouseLeave"
       @touchstart.passive="onTouchStart"
+      @touchmove.passive="onTouchMove"
       @touchend="onTouchEnd"
       @touchcancel="onTouchEnd"
       @contextmenu="onContextMenu"
