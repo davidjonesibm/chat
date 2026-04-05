@@ -84,6 +84,13 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
+// --- Skip waiting when told by the client ---
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 // --- 6. Activate: claim clients immediately ---
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());

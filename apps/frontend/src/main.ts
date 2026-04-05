@@ -10,10 +10,16 @@ app.use(createPinia());
 app.use(router);
 app.mount('#root');
 
-// Register service worker for PWA and push notifications
-registerSW({
+// Register service worker for PWA — auto-update on new versions
+const updateSW = registerSW({
+  onRegistered(registration) {
+    if (registration) {
+      setInterval(() => registration.update(), 60 * 1000);
+    }
+  },
   onNeedRefresh() {
-    console.log('[PWA] New content available, refresh to update.');
+    console.log('[PWA] New content available, updating automatically...');
+    updateSW(true);
   },
   onOfflineReady() {
     console.log('[PWA] App ready for offline use.');
