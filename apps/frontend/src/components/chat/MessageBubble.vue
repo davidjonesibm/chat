@@ -151,7 +151,7 @@ watch(isMobile, () => {
   <template v-else>
     <article
       :aria-label="`Message from ${message.sender.username} at ${formattedTime}`"
-      class="transition-colors duration-150 rounded-lg"
+      class="transition-colors duration-150 rounded-lg select-none"
       :class="{ 'bg-base-200/50': highlighted }"
       @mouseenter="onMouseEnter"
       @mouseleave="onMouseLeave"
