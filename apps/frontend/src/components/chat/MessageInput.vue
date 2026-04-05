@@ -6,6 +6,7 @@ import { useChat } from '../../composables/useChat';
 
 const emit = defineEmits<{
   send: [content: string];
+  'toggle-giphy': [];
 }>();
 
 const chatStore = useChatStore();
@@ -70,6 +71,14 @@ function onBlur() {
         @input="onTyping"
         @blur="onBlur"
       />
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm btn-circle"
+        aria-label="Send a GIF"
+        @click="emit('toggle-giphy')"
+      >
+        GIF
+      </button>
       <button
         type="submit"
         class="btn btn-primary"

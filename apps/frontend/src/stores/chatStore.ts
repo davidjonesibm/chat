@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import type { MessageWithSender } from '@chat/shared';
+import type { MessageWithSender, ReactionSummary } from '@chat/shared';
 
 export const useChatStore = defineStore('chat', () => {
   // State
@@ -52,6 +52,16 @@ export const useChatStore = defineStore('chat', () => {
     unreadCount.value = 0;
   }
 
+  function updateMessageReactions(
+    messageId: string,
+    reactions: ReactionSummary[],
+  ) {
+    const msg = messages.value.find((m) => m.id === messageId);
+    if (msg) {
+      msg.reactions = reactions;
+    }
+  }
+
   function clearChat() {
     messages.value = [];
     typingUsers.value = [];
@@ -87,6 +97,7 @@ export const useChatStore = defineStore('chat', () => {
     setOnlineUsers,
     setCurrentChannel,
     resetPagination,
+    updateMessageReactions,
     clearChat,
   };
 });

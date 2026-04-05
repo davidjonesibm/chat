@@ -4,3 +4,4 @@ export * from './types/message';
 export * from './types/channel';
 export * from './types/events';
 export * from './types/push';
+export * from './types/reaction';

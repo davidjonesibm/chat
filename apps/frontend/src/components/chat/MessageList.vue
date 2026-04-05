@@ -4,11 +4,13 @@ import { storeToRefs } from 'pinia';
 import { useChatStore } from '../../stores/chatStore';
 import { useChannelStore } from '../../stores/channelStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useChat } from '../../composables/useChat';
 import MessageBubble from './MessageBubble.vue';
 
 const chatStore = useChatStore();
 const channelStore = useChannelStore();
 const authStore = useAuthStore();
+const { toggleReaction } = useChat();
 
 const {
   messages,
@@ -233,6 +235,8 @@ onUnmounted(() => {
             <MessageBubble
               :message="msg"
               :is-own="msg.sender.id === currentUserId"
+              :current-user-id="currentUserId ?? ''"
+              @react="toggleReaction"
             />
           </div>
         </template>

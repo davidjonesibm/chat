@@ -22,17 +22,24 @@ const MessageSearch = defineAsyncComponent(
 const ProfileModal = defineAsyncComponent(
   () => import('../components/chat/ProfileModal.vue'),
 );
+const GiphyPicker = defineAsyncComponent(
+  () => import('../components/chat/GiphyPicker.vue'),
+);
 
 const route = useRoute();
 const channelStore = useChannelStore();
 const chatStore = useChatStore();
-const { connect, disconnect, sendMessage, switchChannel } = useChat();
+const { connect, disconnect, sendMessage, sendGiphyMessage, switchChannel } =
+  useChat();
 
 // Sidebar toggle (mobile)
 const sidebarOpen = ref(false);
 
 // Search panel
 const showSearch = ref(false);
+
+// Giphy picker
+const showGiphyPicker = ref(false);
 
 // Modal state
 const showCreateChannel = ref(false);
@@ -57,6 +64,15 @@ function handleSend(content: string) {
 
 function handleToggleSearch() {
   showSearch.value = !showSearch.value;
+}
+
+function handleToggleGiphy() {
+  showGiphyPicker.value = !showGiphyPicker.value;
+}
+
+function handleGifSend(payload: { gifUrl: string; caption: string }) {
+  sendGiphyMessage(payload.gifUrl, payload.caption);
+  showGiphyPicker.value = false;
 }
 
 async function handleNavigateToMessage(channelId: string, messageId: string) {
@@ -140,7 +156,17 @@ onUnmounted(() => {
           <div class="flex-1 flex flex-col min-w-0">
             <ConnectionStatus />
             <MessageList class="flex-1" />
-            <MessageInput @send="handleSend" />
+            <div class="relative">
+              <GiphyPicker
+                :visible="showGiphyPicker"
+                @send="handleGifSend"
+                @close="showGiphyPicker = false"
+              />
+              <MessageInput
+                @send="handleSend"
+                @toggle-giphy="handleToggleGiphy"
+              />
+            </div>
           </div>
           <div v-if="showSearch" class="w-80 shrink-0">
             <MessageSearch

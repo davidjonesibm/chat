@@ -6,7 +6,11 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(async () => {
   const plugins = [
-    vue(),
+    vue({
+      template: {
+        compilerOptions: { isCustomElement: (tag) => tag === 'emoji-picker' },
+      },
+    }),
     tsconfigPaths(),
     VitePWA({
       strategies: 'injectManifest',

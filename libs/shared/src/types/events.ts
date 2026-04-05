@@ -1,10 +1,13 @@
 import type { MessageWithSender } from './message';
+import type { ReactionTogglePayload, ReactionUpdatedPayload } from './reaction';
 
 // --- Payload types ---
 
 export interface MessageSendPayload {
   channelId: string;
   content: string;
+  type?: 'text' | 'giphy';
+  gif_url?: string;
 }
 
 export interface MessageNewPayload {
@@ -42,7 +45,8 @@ export type ClientMessage =
   | { type: 'typing:start'; payload: TypingPayload }
   | { type: 'typing:stop'; payload: TypingPayload }
   | { type: 'channel:join'; payload: ChannelPayload }
-  | { type: 'channel:leave'; payload: ChannelPayload };
+  | { type: 'channel:leave'; payload: ChannelPayload }
+  | { type: 'reaction:toggle'; payload: ReactionTogglePayload };
 
 // --- Server → Client WebSocket messages (discriminated union) ---
 
@@ -51,6 +55,7 @@ export type ServerMessage =
   | { type: 'typing:update'; payload: TypingUpdatePayload }
   | { type: 'presence:update'; payload: PresenceUpdatePayload }
   | { type: 'channel:updated'; payload: ChannelUpdatedPayload }
+  | { type: 'reaction:updated'; payload: ReactionUpdatedPayload }
   | { type: 'error'; payload: { code: string; message: string } };
 
 // --- User data attached to WebSocket connections ---

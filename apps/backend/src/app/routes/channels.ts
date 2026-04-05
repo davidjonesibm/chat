@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
-import type { CreateChannelRequest } from '@chat/shared';
+import type { CreateChannelRequest, ReactionSummary } from '@chat/shared';
 
 function requireUser(request: FastifyRequest) {
   if (!request.user)
@@ -217,9 +217,21 @@ export default async function (fastify: FastifyInstance) {
                         avatar: { type: 'string' },
                       },
                     },
-                    type: { type: 'string', enum: ['text', 'system'] },
+                    type: { type: 'string', enum: ['text', 'system', 'giphy'] },
+                    gif_url: { type: 'string' },
                     created_at: { type: 'string' },
                     updated_at: { type: 'string' },
+                    reactions: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          emoji: { type: 'string' },
+                          count: { type: 'integer' },
+                          userIds: { type: 'array', items: { type: 'string' } },
+                        },
+                      },
+                    },
                   },
                 },
               },
@@ -331,6 +343,42 @@ export default async function (fastify: FastifyInstance) {
       const nextCursor =
         orderedMessages.length > 0 ? orderedMessages[0].created_at : null;
 
+      // Batch-fetch all reactions for these messages
+      const messageIds = orderedMessages.map((msg) => msg.id);
+      const reactionsMap: Record<string, ReactionSummary[]> = {};
+
+      if (messageIds.length > 0) {
+        const { data: allReactions, error: reactionsError } =
+          await fastify.supabaseAdmin
+            .from('message_reactions')
+            .select('message_id, user_id, emoji')
+            .in('message_id', messageIds);
+
+        if (reactionsError) {
+          fastify.log.error(reactionsError);
+        } else if (allReactions) {
+          // Group by message_id then by emoji → ReactionSummary[]
+          for (const row of allReactions) {
+            if (!reactionsMap[row.message_id]) {
+              reactionsMap[row.message_id] = [];
+            }
+            const existing = reactionsMap[row.message_id].find(
+              (r) => r.emoji === row.emoji,
+            );
+            if (existing) {
+              existing.count++;
+              existing.userIds.push(row.user_id);
+            } else {
+              reactionsMap[row.message_id].push({
+                emoji: row.emoji,
+                count: 1,
+                userIds: [row.user_id],
+              });
+            }
+          }
+        }
+      }
+
       return {
         items: orderedMessages.map((msg) => {
           const profile = msg.sender_id ? senderProfiles[msg.sender_id] : null;
@@ -343,9 +391,11 @@ export default async function (fastify: FastifyInstance) {
               username: profile?.username || 'Unknown',
               avatar: profile?.avatar || '',
             },
-            type: msg.type as 'text' | 'system',
+            type: msg.type as 'text' | 'system' | 'giphy',
+            gif_url: msg.gif_url ?? undefined,
             created_at: msg.created_at,
             updated_at: msg.updated_at,
+            reactions: reactionsMap[msg.id] ?? [],
           };
         }),
         nextCursor,

@@ -1,8 +1,5 @@
-import type {
-  BaseRecord,
-  CursorPaginatedResponse,
-  PaginatedResponse,
-} from './base';
+import type { BaseRecord, CursorPaginatedResponse } from './base';
+import type { ReactionSummary } from './reaction';
 
 /**
  * Message record from messages table
@@ -11,12 +8,20 @@ export interface MessageRecord extends BaseRecord {
   content: string;
   channel: string;
   sender: string;
-  type: 'text' | 'system';
+  type: 'text' | 'system' | 'giphy';
+  gif_url?: string;
 }
 
 export type Message = Pick<
   MessageRecord,
-  'id' | 'content' | 'channel' | 'sender' | 'type' | 'created_at' | 'updated_at'
+  | 'id'
+  | 'content'
+  | 'channel'
+  | 'sender'
+  | 'type'
+  | 'gif_url'
+  | 'created_at'
+  | 'updated_at'
 >;
 
 /**
@@ -31,9 +36,11 @@ export interface MessageWithSender {
     username: string;
     avatar?: string;
   };
-  type: 'text' | 'system';
+  type: 'text' | 'system' | 'giphy';
+  gif_url?: string;
   created_at: string;
   updated_at: string;
+  reactions?: ReactionSummary[];
 }
 
 export interface MessageListResponse {

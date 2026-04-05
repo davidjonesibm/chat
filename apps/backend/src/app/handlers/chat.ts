@@ -9,6 +9,8 @@ import type {
   TypingPayload,
   ChannelPayload,
   PushNotificationPayload,
+  ReactionTogglePayload,
+  ReactionSummary,
 } from '@chat/shared';
 
 // Type for push sender function passed from socket plugin
@@ -134,6 +136,11 @@ async function handleMessage(
         handleChannelLeave(ws, clientMessage.payload, user);
         break;
 
+      case 'reaction:toggle': {
+        await handleReactionToggle(supabase, clientMessage.payload, user.id);
+        break;
+      }
+
       default:
         console.error('Unknown message type:', clientMessage);
     }
@@ -153,21 +160,62 @@ async function handleMessageSend(
   pushSender?: PushSender,
 ): Promise<void> {
   try {
-    const { channelId, content } = payload;
+    const { channelId, content, type: payloadType, gif_url } = payload;
+
+    // Determine message type
+    const messageType = payloadType === 'giphy' ? 'giphy' : 'text';
 
     // Validate payload
-    if (
-      !content ||
-      typeof content !== 'string' ||
-      content.trim().length === 0
-    ) {
-      console.error('[message:send] Invalid content');
-      return;
-    }
-
     if (!channelId || typeof channelId !== 'string') {
       console.error('[message:send] Invalid channelId');
       return;
+    }
+
+    if (messageType === 'giphy') {
+      // Giphy messages require a valid gif_url from giphy.com
+      if (!gif_url || typeof gif_url !== 'string') {
+        console.error('[message:send] Giphy message missing gif_url');
+        return;
+      }
+      if (!gif_url.startsWith('https://')) {
+        console.error('[message:send] gif_url must start with https://');
+        return;
+      }
+      try {
+        const parsedUrl = new URL(gif_url);
+        if (
+          parsedUrl.hostname !== 'giphy.com' &&
+          !parsedUrl.hostname.endsWith('.giphy.com')
+        ) {
+          console.error('[message:send] gif_url must be from giphy.com domain');
+          ws.send(
+            JSON.stringify({
+              type: 'error',
+              payload: { message: 'gif_url must be from giphy.com domain' },
+            }),
+          );
+          return;
+        }
+      } catch {
+        console.error('[message:send] gif_url is not a valid URL');
+        ws.send(
+          JSON.stringify({
+            type: 'error',
+            payload: { message: 'gif_url is not a valid URL' },
+          }),
+        );
+        return;
+      }
+    } else {
+      // Text messages require non-empty content
+      if (
+        !content ||
+        typeof content !== 'string' ||
+        content.trim().length === 0
+      ) {
+        console.error('[message:send] Invalid content');
+        return;
+      }
     }
 
     // Create message in Supabase
@@ -176,10 +224,11 @@ async function handleMessageSend(
     const { data: message, error } = await supabase
       .from('messages')
       .insert({
-        content: content.trim(),
+        content: content ? content.trim() : '',
         channel_id: channelId,
         sender_id: user.id,
-        type: 'text',
+        type: messageType,
+        gif_url: messageType === 'giphy' ? gif_url! : null,
       })
       .select('*')
       .single();
@@ -217,9 +266,11 @@ async function handleMessageSend(
           content: message.content,
           channel: channelId,
           sender: senderData,
-          type: 'text',
+          type: messageType,
+          gif_url: messageType === 'giphy' ? gif_url : undefined,
           created_at: message.created_at,
           updated_at: message.updated_at,
+          reactions: [],
         },
       },
     };
@@ -234,6 +285,7 @@ async function handleMessageSend(
       sendPushToOfflineUsers(
         channelId,
         message.content,
+        messageType,
         user,
         senderData.username,
         supabase,
@@ -253,6 +305,7 @@ async function handleMessageSend(
 async function sendPushToOfflineUsers(
   channelId: string,
   messageContent: string,
+  messageType: string,
   sender: WsUser,
   senderUsername: string,
   supabase: SupabaseClient<Database>,
@@ -296,10 +349,17 @@ async function sendPushToOfflineUsers(
     }
 
     // Truncate message content for notification
-    const truncatedContent =
-      messageContent.length > 100
-        ? messageContent.substring(0, 97) + '...'
-        : messageContent;
+    let truncatedContent: string;
+    if (messageType === 'giphy') {
+      truncatedContent = messageContent
+        ? `sent a GIF: ${messageContent}`
+        : 'sent a GIF';
+    } else {
+      truncatedContent =
+        messageContent.length > 100
+          ? messageContent.substring(0, 97) + '...'
+          : messageContent;
+    }
 
     // Send push to each offline user
     let successCount = 0;
@@ -531,6 +591,125 @@ function handleChannelLeave(
     console.log(`[channel:leave] ${user.username} left channel:${channelId}`);
   } catch (err) {
     console.error('[channel:leave] Error:', err);
+  }
+}
+
+/**
+ * Handle reaction:toggle WebSocket message
+ */
+async function handleReactionToggle(
+  supabase: SupabaseClient<Database>,
+  payload: ReactionTogglePayload,
+  userId: string,
+): Promise<void> {
+  try {
+    const { messageId, emoji } = payload;
+
+    if (!messageId || typeof messageId !== 'string') {
+      console.error('[reaction:toggle] Invalid messageId');
+      return;
+    }
+
+    if (!emoji || typeof emoji !== 'string') {
+      console.error('[reaction:toggle] Invalid emoji');
+      return;
+    }
+
+    // Authorization: verify the requesting user is a member of the group that owns the channel
+    const { data: msg } = await supabase
+      .from('messages')
+      .select('channel_id')
+      .eq('id', messageId)
+      .single();
+
+    if (!msg) {
+      return;
+    }
+
+    const { data: channel } = await supabase
+      .from('channels')
+      .select('group_id')
+      .eq('id', msg.channel_id)
+      .single();
+
+    if (!channel) {
+      return;
+    }
+
+    const { data: membership } = await supabase
+      .from('group_members')
+      .select('user_id')
+      .eq('group_id', channel.group_id)
+      .eq('user_id', userId)
+      .single();
+
+    if (!membership) {
+      return;
+    }
+
+    const channelId = msg.channel_id;
+
+    // Check whether this user has already reacted with this emoji
+    const { data: existing } = await supabase
+      .from('message_reactions')
+      .select('id')
+      .eq('message_id', messageId)
+      .eq('user_id', userId)
+      .eq('emoji', emoji)
+      .single();
+
+    if (existing) {
+      // Un-react: delete the row
+      await supabase.from('message_reactions').delete().eq('id', existing.id);
+    } else {
+      // React: insert a new row
+      await supabase.from('message_reactions').insert({
+        message_id: messageId,
+        user_id: userId,
+        emoji,
+      });
+    }
+
+    // Fetch all current reactions for this message and aggregate
+    const { data: allReactions, error: fetchError } = await supabase
+      .from('message_reactions')
+      .select('user_id, emoji')
+      .eq('message_id', messageId);
+
+    if (fetchError) {
+      console.error('[reaction:toggle] Failed to fetch reactions:', fetchError);
+      return;
+    }
+
+    const summaryMap = new Map<string, ReactionSummary>();
+    for (const row of allReactions ?? []) {
+      const existing = summaryMap.get(row.emoji);
+      if (existing) {
+        existing.count++;
+        existing.userIds.push(row.user_id);
+      } else {
+        summaryMap.set(row.emoji, {
+          emoji: row.emoji,
+          count: 1,
+          userIds: [row.user_id],
+        });
+      }
+    }
+
+    const reactions = Array.from(summaryMap.values());
+
+    // Broadcast reaction:updated to all subscribers of the channel
+    const serverMessage: ServerMessage = {
+      type: 'reaction:updated',
+      payload: { messageId, reactions },
+    };
+    broadcastToRoom(channelId, serverMessage);
+
+    console.log(
+      `[reaction:toggle] message:${messageId} emoji:${emoji} by user:${userId}`,
+    );
+  } catch (err) {
+    console.error('[reaction:toggle] Error:', err);
   }
 }
 

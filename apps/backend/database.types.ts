@@ -166,11 +166,54 @@ export type Database = {
           },
         ];
       };
+      message_reactions: {
+        Row: {
+          id: string;
+          message_id: string;
+          user_id: string;
+          emoji: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          message_id: string;
+          user_id: string;
+          emoji: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          message_id?: string;
+          user_id?: string;
+          emoji?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'message_reactions_message_id_fkey';
+            columns: ['message_id'];
+            isOneToOne: false;
+            referencedRelation: 'messages';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'message_reactions_user_id_fkey';
+            columns: ['user_id'];
+            isOneToOne: false;
+            referencedRelation: 'users';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
       messages: {
         Row: {
           channel_id: string | null;
           content: string;
           created_at: string;
+          gif_url: string | null;
           id: string;
           sender_id: string | null;
           type: string;
@@ -180,6 +223,7 @@ export type Database = {
           channel_id?: string | null;
           content: string;
           created_at?: string;
+          gif_url?: string | null;
           id?: string;
           sender_id?: string | null;
           type: string;
@@ -189,6 +233,7 @@ export type Database = {
           channel_id?: string | null;
           content?: string;
           created_at?: string;
+          gif_url?: string | null;
           id?: string;
           sender_id?: string | null;
           type?: string;

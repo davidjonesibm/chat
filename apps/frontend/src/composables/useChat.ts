@@ -119,6 +119,13 @@ export function useChat() {
             console.log('[WebSocket] Channel updated:', message.payload);
             break;
 
+          case 'reaction:updated':
+            chatStore.updateMessageReactions(
+              message.payload.messageId,
+              message.payload.reactions,
+            );
+            break;
+
           case 'error':
             useToast().addToast('error', message.payload.message);
             break;
@@ -312,13 +319,44 @@ export function useChat() {
     });
   }
 
+  function sendGiphyMessage(gifUrl: string, caption: string) {
+    const channelId = chatStore.currentChannelId;
+    if (!channelId) return;
+
+    if (ws?.readyState !== WebSocket.OPEN) {
+      useToast().addToast('error', 'Cannot send GIF while offline');
+      return;
+    }
+
+    const message: ClientMessage = {
+      type: 'message:send',
+      payload: {
+        channelId,
+        content: caption,
+        type: 'giphy',
+        gif_url: gifUrl,
+      },
+    };
+
+    ws.send(JSON.stringify(message));
+  }
+
+  function toggleReaction(messageId: string, emoji: string) {
+    sendClientMessage({
+      type: 'reaction:toggle',
+      payload: { messageId, emoji },
+    });
+  }
+
   return {
     connect,
     disconnect,
     sendMessage,
+    sendGiphyMessage,
     startTyping,
     stopTyping,
     switchChannel,
+    toggleReaction,
     error,
   };
 }

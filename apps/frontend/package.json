@@ -11,7 +11,10 @@
   },
   "dependencies": {
     "@chat/shared": "workspace:*",
+    "@giphy/js-components": "^5.13.0",
+    "@giphy/js-fetch-api": "^5.7.0",
     "@supabase/supabase-js": "^2.0.0",
+    "emoji-picker-element": "^1.29.1",
     "idb-keyval": "^6.2.2",
     "vite-plugin-pwa": "^1.2.0",
     "workbox-background-sync": "^7.4.0",
