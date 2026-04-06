@@ -70,6 +70,12 @@ applyTo: '**'
 
 **Every SQL migration that creates a new table MUST be accompanied by a corresponding addition to `database.types.ts`.** Never cast `supabaseAdmin as any` to work around a missing table type — adding the type is the fix.
 
+## Type Narrowing Patterns
+
+- **Nullable store → required prop**: Use `v-if` guards (e.g., `v-if="store.value"`) so Vue narrows the type before the prop binding.
+- **`null` → `undefined` for DOM bindings**: Use `?? undefined` (e.g., `:src="url ?? undefined"`).
+- **Guard before action**: Use early returns (e.g., `if (!id) return;`) before using nullable values.
+
 ## Do NOT
 
 - Query Supabase directly from the frontend (except auth).
@@ -79,3 +85,4 @@ applyTo: '**'
 - Send untyped JSON over WebSocket.
 - Bypass Fastify JSON Schema validation for user-supplied input.
 - Cast `supabaseAdmin as any` (or `untypedAdmin`) — update `database.types.ts` instead.
+- Use the TypeScript `!` non-null assertion operator — use `v-if` type narrowing, `?? undefined` coalescing, or control-flow guards instead.

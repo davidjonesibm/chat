@@ -125,8 +125,8 @@ async function handleImageSend(payload: { file: File; caption: string }) {
 
   try {
     const formData = new FormData();
-    formData.append('file', payload.file);
     formData.append('channelId', channelId);
+    formData.append('file', payload.file);
 
     const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
     const { url } = await apiFetch<{ url: string }>(`${baseUrl}/api/images`, {
@@ -216,7 +216,9 @@ onUnmounted(() => {
       />
 
       <!-- Show empty state if no groups/channels selected -->
-      <template v-if="channelStore.currentChannelId">
+      <template
+        v-if="channelStore.currentChannelId && channelStore.currentGroupId"
+      >
         <div class="flex-1 flex min-h-0">
           <div class="flex-1 flex flex-col min-w-0">
             <ConnectionStatus />
@@ -244,8 +246,8 @@ onUnmounted(() => {
           @close="showSearch = false"
         >
           <MessageSearch
-            :group-id="channelStore.currentGroupId!"
-            :current-channel-id="channelStore.currentChannelId!"
+            :group-id="channelStore.currentGroupId"
+            :current-channel-id="channelStore.currentChannelId"
             @close="showSearch = false"
             @navigate-to-message="handleNavigateToMessage"
           />
@@ -265,13 +267,14 @@ onUnmounted(() => {
 
     <!-- Modals -->
     <CreateChannelModal
+      v-if="channelStore.currentGroupId"
       v-model="showCreateChannel"
-      :group-id="channelStore.currentGroupId!"
+      :group-id="channelStore.currentGroupId"
       @created="handleChannelCreated"
     />
     <InviteModal
-      v-if="showInvite"
-      :group-id="channelStore.currentGroupId!"
+      v-if="showInvite && channelStore.currentGroupId"
+      :group-id="channelStore.currentGroupId"
       @close="showInvite = false"
     />
     <ProfileModal v-model="showProfile" />

@@ -69,6 +69,7 @@ function focusItem() {
 }
 
 function handleSelectChannel(channelId: string) {
+  if (!channelStore.currentGroupId) return;
   channelStore.selectChannel(channelId);
   router.push(`/g/${channelStore.currentGroupId}/c/${channelId}`);
   emit('close');

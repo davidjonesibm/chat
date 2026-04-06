@@ -1,7 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+
 export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
+  SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_PUBLISHABLE,
   {
     auth: {
@@ -12,3 +14,11 @@ export const supabase = createClient(
     },
   },
 );
+
+export function toStorageUrl(
+  path: string | null | undefined,
+): string | undefined {
+  if (!path) return undefined;
+  if (path.startsWith('http')) return path;
+  return `${SUPABASE_URL}${path}`;
+}

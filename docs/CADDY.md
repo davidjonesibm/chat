@@ -154,7 +154,66 @@ Because all traffic shares the same origin, `VITE_API_URL` and `VITE_SOCKET_URL`
 
 - **Rebuilding after frontend changes:** Caddy serves the _built_ output, not the dev server. After making frontend changes, re-run `pnpm build:frontend` and reload the browser.
 - **Reloading Caddy config:** If you edit a Caddyfile while Caddy is running, apply the change with `caddy reload --config <filename>` without a full restart.
-- **Trusting the cert on other LAN devices:** `caddy trust` only installs the CA on the local machine. Other devices on your network will see a cert warning unless you manually install Caddy's root CA on them.
+- **Trusting the cert on other LAN devices:** `caddy trust` only installs the CA on the local machine. Other devices on your network will see a cert warning unless you manually install Caddy's root CA on them. See [Installing the root CA on LAN devices](#installing-the-root-ca-on-lan-devices) below.
+
+---
+
+## Installing the root CA on LAN devices
+
+Caddy's internal CA root certificate lives at:
+
+```
+~/Library/Application Support/Caddy/pki/authorities/local/root.crt
+```
+
+### macOS (this machine)
+
+`caddy trust` (or `sudo caddy trust`) already handles this — it installs the root CA into the System keychain with full SSL trust. Chrome and Safari on this machine trust it automatically. If you ever need to redo it (e.g. after the CA rotates):
+
+```sh
+sudo caddy trust
+```
+
+### iOS / iPadOS
+
+iOS requires the CA to be downloaded as a profile and then explicitly enabled. Apple devices do not inherit trust from macOS.
+
+**Step 1 — Serve the cert over plain HTTP so the device can download it**
+
+```sh
+cd ~/Library/Application\ Support/Caddy/pki/authorities/local
+python3 -m http.server 8080
+```
+
+**Step 2 — On the iOS device, open Safari** (must be Safari — Chrome won't trigger the install prompt) and navigate to:
+
+```
+http://192.168.86.20:8080/root.crt
+```
+
+Tap **Allow** when prompted. A "Profile Downloaded" banner will appear.
+
+**Step 3 — Install the profile**
+
+Go to **Settings** → tap **Profile Downloaded** (appears near the top, below your name) → tap **Install** → enter your passcode → confirm twice → tap **Done**.
+
+**Step 4 — Enable full trust (critical — do not skip)**
+
+Go to **Settings → General → About → Certificate Trust Settings**, then toggle on **Caddy Local Authority - 2026 ECC Root** and tap **Continue**.
+
+Without this step the certificate is installed but _not_ trusted for TLS — WSS connections and HTTPS requests will still fail.
+
+**Step 5 — Test**
+
+Reload the app in Safari. The WebSocket connection should succeed and no mixed-content errors should appear.
+
+### Android
+
+```
+Settings → Security → Encryption & credentials → Install a certificate → CA certificate
+```
+
+Pick the `root.crt` file from your Downloads folder. Note: on some OEM builds the user-store certificate is not trusted by Chrome for PWA service workers — you may need to install it to the system store instead.
 
 ---
 

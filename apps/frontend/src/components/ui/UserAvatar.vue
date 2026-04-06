@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { toStorageUrl } from '../../lib/supabase';
 
 interface Props {
   username: string;
@@ -49,7 +50,9 @@ const bgColor = computed(() => {
   return COLORS[Math.abs(hash) % COLORS.length];
 });
 
-const showImg = computed(() => props.avatarUrl && !imgFailed.value);
+const resolvedUrl = computed(() => toStorageUrl(props.avatarUrl));
+
+const showImg = computed(() => resolvedUrl.value && !imgFailed.value);
 
 function handleImgError() {
   imgFailed.value = true;
@@ -71,7 +74,7 @@ const textSize = computed(() => {
     <div :class="[sizeClass, 'rounded-full']">
       <img
         v-if="showImg"
-        :src="avatarUrl!"
+        :src="resolvedUrl"
         :alt="`${username}'s avatar`"
         loading="lazy"
         decoding="async"

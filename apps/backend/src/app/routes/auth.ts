@@ -5,6 +5,7 @@ import type {
   LoginRequest,
   UpdateProfileRequest,
 } from '@chat/shared';
+import { toStoragePath } from '../utils/storage';
 
 function requireUser(request: FastifyRequest) {
   if (!request.user)
@@ -264,7 +265,7 @@ export default async function (fastify: FastifyInstance) {
       const profileUpdate: Record<string, string> = {};
       if (username !== undefined) profileUpdate.username = username.trim();
       if (name !== undefined) profileUpdate.name = name.trim();
-      if (avatar !== undefined) profileUpdate.avatar = avatar;
+      if (avatar !== undefined) profileUpdate.avatar = toStoragePath(avatar);
 
       // Update profiles table
       const { data: profile, error: profileError } = await fastify.supabaseAdmin
@@ -285,7 +286,7 @@ export default async function (fastify: FastifyInstance) {
       const metadataUpdate: Record<string, string> = {};
       if (username !== undefined) metadataUpdate.username = username.trim();
       if (name !== undefined) metadataUpdate.name = name.trim();
-      if (avatar !== undefined) metadataUpdate.avatar = avatar;
+      if (avatar !== undefined) metadataUpdate.avatar = toStoragePath(avatar);
 
       if (Object.keys(metadataUpdate).length > 0) {
         const { error: authError } =
@@ -399,10 +400,13 @@ export default async function (fastify: FastifyInstance) {
         .from('avatars')
         .getPublicUrl(storagePath);
 
+      // Strip to pathname for DB storage
+      const storedPath = toStoragePath(publicUrl);
+
       // Update profiles table
       const { error: profileError } = await fastify.supabaseAdmin
         .from('profiles')
-        .update({ avatar: publicUrl })
+        .update({ avatar: storedPath })
         .eq('id', user.id);
 
       if (profileError) {
@@ -415,14 +419,14 @@ export default async function (fastify: FastifyInstance) {
       // Sync auth.users metadata
       const { error: authError } =
         await fastify.supabaseAdmin.auth.admin.updateUserById(user.id, {
-          user_metadata: { avatar: publicUrl },
+          user_metadata: { avatar: storedPath },
         });
 
       if (authError) {
         fastify.log.error(authError, 'User metadata avatar update failed');
       }
 
-      return { url: publicUrl };
+      return { url: storedPath };
     },
   );
 

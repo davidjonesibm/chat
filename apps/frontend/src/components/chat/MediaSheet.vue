@@ -41,7 +41,7 @@ function handleClose() {
   <Transition name="slide-up">
     <div
       v-if="visible"
-      class="absolute bottom-full left-0 right-0 mb-1 z-20 flex flex-col bg-base-200 rounded-t-2xl border border-base-300 shadow-xl max-h-[60vh] sm:max-h-[50vh] overflow-hidden"
+      class="absolute bottom-full left-0 right-0 mb-1 z-20 flex flex-col bg-base-200 rounded-t-2xl border border-base-300 shadow-xl h-[60vh] sm:h-[50vh] overflow-hidden"
       role="dialog"
       aria-label="Media picker"
     >

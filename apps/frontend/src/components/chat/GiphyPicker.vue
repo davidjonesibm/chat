@@ -159,7 +159,7 @@ onUnmounted(() => {
 <template>
   <Transition name="slide-up">
     <div
-      v-if="visible"
+      v-if="visible || embedded"
       class="flex flex-col overflow-hidden"
       :class="
         embedded

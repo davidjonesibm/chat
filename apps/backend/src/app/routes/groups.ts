@@ -359,7 +359,10 @@ export default async function (fastify: FastifyInstance) {
         );
       }
 
-      return profiles || [];
+      return (profiles || []).map((p) => ({
+        ...p,
+        avatar: p.avatar || '',
+      }));
     },
   );
 

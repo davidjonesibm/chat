@@ -791,6 +791,10 @@ Regardless of scaling stage, these remain constant:
 | WebSocket message types | `noun:verb`                     | `message:send`, `typing:start`                         |
 | API routes              | `kebab-case` (REST)             | `/api/groups/:id/channels`                             |
 
+### D. TypeScript Conventions
+
+- **Never use the `!` non-null assertion operator.** Prefer `v-if` template guards, `?? undefined` coalescing, or control-flow guards (`if (!x) return`).
+
 ---
 
-_Last updated: 2026-03-24_
+_Last updated: 2026-04-06_
