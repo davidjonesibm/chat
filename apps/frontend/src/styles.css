@@ -4,3 +4,72 @@
     corporate --default,
     business --prefersdark;
 }
+
+html {
+  height: 100%;
+}
+
+body {
+  min-height: 100%;
+  overscroll-behavior-y: none;
+}
+
+@layer base {
+  @media (display-mode: standalone) {
+    html,
+    body {
+      height: 100lvh;
+    }
+  }
+}
+
+#root {
+  min-height: 100%;
+}
+
+/* Safe-area utilities */
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@utility pl-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
+@utility pr-safe {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+@utility py-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Min-padding variants: guarantee at least 1rem */
+@utility pt-safe-or-4 {
+  padding-top: max(1rem, env(safe-area-inset-top, 0px));
+}
+
+@utility pb-safe-or-4 {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+@utility pb-safe-or-3 {
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+
+/* Additive variant: base padding + safe area */
+@utility pb-safe-offset-3 {
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+.input:focus,
+.input:focus-within {
+  outline: none;
+  box-shadow: none;
+  border-color: oklch(var(--p));
+}

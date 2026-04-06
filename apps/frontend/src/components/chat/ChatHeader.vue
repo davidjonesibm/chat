@@ -26,9 +26,7 @@ const groupName = computed(() => currentGroup.value?.name || '');
 
 <template>
   <div>
-    <header
-      class="navbar bg-base-200 border-b border-base-300 pt-[env(safe-area-inset-top,0px)]"
-    >
+    <header class="navbar bg-base-200 border-b border-base-300 pt-safe">
       <!-- Mobile hamburger menu -->
       <div class="flex-none lg:hidden">
         <button

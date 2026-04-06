@@ -76,6 +76,11 @@ export default defineConfig(async () => {
     server: {
       port: 4200,
       host: 'localhost',
+      hmr: {
+        protocol: 'wss',
+        host: '192.168.86.20',
+        clientPort: 8443,
+      },
     },
     preview: {
       port: 4300,

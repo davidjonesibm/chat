@@ -82,7 +82,7 @@ function handleLogout() {
 
 <template>
   <aside
-    class="h-full bg-base-200 flex flex-col border-r border-base-300 pl-[env(safe-area-inset-left,0px)] pb-[env(safe-area-inset-bottom,0px)]"
+    class="h-full bg-base-200 flex flex-col border-r border-base-300 pl-safe pt-safe"
   >
     <!-- Group Header -->
     <div class="p-4 border-b border-base-300 flex items-center gap-2">
@@ -151,7 +151,7 @@ function handleLogout() {
 
     <!-- User Info & Logout -->
     <div
-      class="p-3 border-t border-base-300 flex items-center gap-2 bg-base-300"
+      class="px-3 pt-3 pb-safe-or-3 border-t border-base-300 flex items-center gap-2 bg-base-300"
     >
       <div
         class="flex-1 min-w-0 flex items-center gap-2 cursor-pointer hover:opacity-80"

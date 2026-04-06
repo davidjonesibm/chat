@@ -78,7 +78,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-base-200 flex items-center justify-center p-4">
+  <div
+    class="min-h-[100dvh] bg-base-200 flex items-center justify-center px-4 pt-safe-or-4 pb-safe-or-4"
+  >
     <!-- Loading -->
     <div v-if="state === 'loading'" class="flex flex-col items-center gap-4">
       <span class="loading loading-spinner loading-lg text-primary"></span>

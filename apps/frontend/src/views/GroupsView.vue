@@ -58,11 +58,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <div
-    class="min-h-screen bg-base-200 flex flex-col pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)]"
-  >
+  <div class="min-h-[100dvh] bg-base-200 flex flex-col pb-safe">
     <!-- Top bar -->
-    <header class="navbar bg-base-100 shadow-sm px-4">
+    <header class="navbar bg-base-100 shadow-sm px-4 sticky top-0 z-10 pt-safe">
       <div class="flex-1">
         <h1 class="text-xl font-bold">My Groups</h1>
       </div>

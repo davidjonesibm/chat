@@ -4,11 +4,13 @@ import { useRoute } from 'vue-router';
 import { useChannelStore } from '../stores/channelStore';
 import { useChatStore } from '../stores/chatStore';
 import { useChat } from '../composables/useChat';
+import { useSwipePanel } from '../composables/useSwipePanel';
 import ChannelSidebar from '../components/chat/ChannelSidebar.vue';
 import ChatHeader from '../components/chat/ChatHeader.vue';
 import MessageList from '../components/chat/MessageList.vue';
 import MessageInput from '../components/chat/MessageInput.vue';
 import ConnectionStatus from '../components/ui/ConnectionStatus.vue';
+import SlidePanel from '../components/ui/SlidePanel.vue';
 
 const CreateChannelModal = defineAsyncComponent(
   () => import('../components/chat/CreateChannelModal.vue'),
@@ -35,34 +37,43 @@ const { connect, disconnect, sendMessage, sendGiphyMessage, switchChannel } =
 // Sidebar toggle (mobile)
 const sidebarOpen = ref(false);
 
-let touchStartX = 0;
-let touchStartY = 0;
-let isLeftZone = false;
-
-const MIN_SWIPE_DISTANCE = 50;
-
-function onTouchStart(e: TouchEvent) {
-  const touch = e.touches[0];
-  touchStartX = touch.clientX;
-  touchStartY = touch.clientY;
-  isLeftZone = touch.clientX <= window.innerWidth * 0.3;
-}
-
-function onTouchEnd(e: TouchEvent) {
-  const touch = e.changedTouches[0];
-  const dx = touch.clientX - touchStartX;
-  const dy = Math.abs(touch.clientY - touchStartY);
-  if (sidebarOpen.value) {
-    if (dx <= -MIN_SWIPE_DISTANCE && Math.abs(dx) > dy) {
-      sidebarOpen.value = false;
-    }
-  } else if (isLeftZone && dx >= MIN_SWIPE_DISTANCE && dx > dy) {
-    sidebarOpen.value = true;
-  }
-}
-
 // Search panel
 const showSearch = ref(false);
+
+// Mutual exclusion: only one panel open at a time
+watch(sidebarOpen, (v) => {
+  if (v) showSearch.value = false;
+});
+watch(showSearch, (v) => {
+  if (v) sidebarOpen.value = false;
+});
+
+// Swipe-to-open panels
+const { onTouchStart: sidebarTouchStart, onTouchEnd: sidebarTouchEnd } =
+  useSwipePanel('left', sidebarOpen);
+const { onTouchStart: searchTouchStart, onTouchEnd: searchTouchEnd } =
+  useSwipePanel('right', showSearch);
+
+function onTouchStart(e: TouchEvent) {
+  if (showSearch.value) {
+    searchTouchStart(e);
+  } else if (sidebarOpen.value) {
+    sidebarTouchStart(e);
+  } else {
+    sidebarTouchStart(e);
+    searchTouchStart(e);
+  }
+}
+function onTouchEnd(e: TouchEvent) {
+  if (showSearch.value) {
+    searchTouchEnd(e);
+  } else if (sidebarOpen.value) {
+    sidebarTouchEnd(e);
+  } else {
+    sidebarTouchEnd(e);
+    searchTouchEnd(e);
+  }
+}
 
 // Giphy picker
 const showGiphyPicker = ref(false);
@@ -142,23 +153,18 @@ onUnmounted(() => {
 
 <template>
   <div
-    class="h-screen flex overflow-hidden pb-[env(safe-area-inset-bottom,0px)]"
+    class="fixed inset-0 flex overflow-hidden"
     @touchstart.passive="onTouchStart"
     @touchend.passive="onTouchEnd"
   >
-    <!-- Mobile sidebar overlay -->
-    <div
-      v-if="sidebarOpen"
-      class="fixed inset-0 bg-black/50 z-20 lg:hidden"
-      @click="sidebarOpen = false"
-    ></div>
-
     <!-- Sidebar -->
-    <aside
-      role="navigation"
+    <SlidePanel
+      :open="sidebarOpen"
+      side="left"
+      width="w-64"
+      :static-on-desktop="true"
       aria-label="Channels"
-      class="fixed lg:static inset-y-0 left-0 z-30 w-64 transform transition-transform lg:translate-x-0"
-      :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+      @close="sidebarOpen = false"
     >
       <ChannelSidebar
         @create-channel="handleCreateChannel"
@@ -166,7 +172,7 @@ onUnmounted(() => {
         @open-profile="showProfile = true"
         @close="sidebarOpen = false"
       />
-    </aside>
+    </SlidePanel>
 
     <!-- Main chat area -->
     <div
@@ -198,15 +204,22 @@ onUnmounted(() => {
               />
             </div>
           </div>
-          <div v-if="showSearch" class="w-80 shrink-0">
-            <MessageSearch
-              :group-id="channelStore.currentGroupId!"
-              :current-channel-id="channelStore.currentChannelId!"
-              @close="showSearch = false"
-              @navigate-to-message="handleNavigateToMessage"
-            />
-          </div>
         </div>
+
+        <SlidePanel
+          :open="showSearch"
+          side="right"
+          width="w-80"
+          aria-label="Search messages"
+          @close="showSearch = false"
+        >
+          <MessageSearch
+            :group-id="channelStore.currentGroupId!"
+            :current-channel-id="channelStore.currentChannelId!"
+            @close="showSearch = false"
+            @navigate-to-message="handleNavigateToMessage"
+          />
+        </SlidePanel>
       </template>
       <template v-else>
         <div class="flex-1 flex items-center justify-center">
