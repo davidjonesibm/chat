@@ -9,7 +9,7 @@
     "dev:supabase:stop": "pnpm --filter @chat/backend db-stop",
     "build:frontend": "pnpm --filter @chat/frontend build",
     "build:backend": "pnpm --filter @chat/backend build",
-    "build": "pnpm -r run build",
+    "build": "pnpm -r --reporter=append-only run build",
     "lint": "pnpm -r run lint",
     "format": "prettier --write .",
     "test": "pnpm -r run test",

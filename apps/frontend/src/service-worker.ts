@@ -1,8 +1,12 @@
 /// <reference lib="webworker" />
 declare const self: ServiceWorkerGlobalScope;
 
-import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
-import { registerRoute } from 'workbox-routing';
+import {
+  cleanupOutdatedCaches,
+  createHandlerBoundToURL,
+  precacheAndRoute,
+} from 'workbox-precaching';
+import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { NetworkFirst } from 'workbox-strategies';
 import { BackgroundSyncPlugin } from 'workbox-background-sync';
 import type { PushNotificationPayload } from '@chat/shared';
@@ -10,6 +14,15 @@ import type { PushNotificationPayload } from '@chat/shared';
 // --- 1. Precache app shell ---
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
+
+// --- 2. SPA navigation fallback ---
+const navigationRoute = new NavigationRoute(
+  createHandlerBoundToURL('/index.html'),
+  {
+    denylist: [/^\/api\//],
+  },
+);
+registerRoute(navigationRoute);
 
 // --- 3. Background Sync for offline message POSTs ---
 const bgSyncPlugin = new BackgroundSyncPlugin('offlineMessageQueue', {

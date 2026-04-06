@@ -52,6 +52,7 @@ agents:
     'Custom Agent Foundry',
     'PWA Expert',
     'Docker Expert',
+    'Caddy Expert',
   ]
 ---
 
@@ -195,6 +196,7 @@ Using the wrong agent (or a generic one when a specialist exists) is a failure o
 | **PWA Expert**                      | ALL Progressive Web App work: service workers, web app manifests, offline strategies, push notifications, background sync, Workbox configuration, vite-plugin-pwa, PWA installability, Core Web Vitals for PWAs. ANY task where keywords are: offline, service worker, SW, manifest, installable, push notification, background sync, workbox, vite-plugin-pwa, pwa. |
 | **Custom Agent Foundry**            | ALL work on VS Code agent customization files: `.agent.md`, `.instructions.md`, `.prompt.md`, `SKILL.md`, `copilot-instructions.md`. This includes initial creation, edits after Code Reviewer FAIL, updates/improvements, debugging why agents aren't being invoked, and fixing YAML frontmatter syntax. NEVER route agent file editing to Software Engineer Agent. |
 | **Docker Expert**                   | ALL Docker and container work: Dockerfiles, multi-stage builds, Docker Compose configs, `.dockerignore`, container networking, volumes, security hardening, image optimization, and production deployment patterns. ANY task touching `Dockerfile`, `docker-compose*.yml`, or container infrastructure.                                                              |
+| **Caddy Expert**                    | ALL Caddy web server work: Caddyfile syntax and configuration, reverse proxying, TLS (including `tls internal` for LAN dev), request matchers, response headers, cache-control, static file serving, SPA/PWA fallback routing, multi-service gateway routing. ANY task touching `Caddyfile`, `Caddyfile.*`, or Caddy configuration.                                  |
 
 ## 7. Routing Rules
 
@@ -214,6 +216,7 @@ Using the wrong agent (or a generic one when a specialist exists) is a failure o
    - PWA features (service workers, manifest, offline, push, workbox) → PWA Expert
    - Agent customization files (.agent.md, .instructions.md, .prompt.md, SKILL.md, copilot-instructions.md) → Custom Agent Foundry
    - Docker/container work (Dockerfile, docker-compose, container infra) → Docker Expert
+   - Caddy configuration (Caddyfile, Caddyfile.*, reverse proxy, TLS, caching headers) → Caddy Expert
    - General backend/config/scripts → Software Engineer Agent (fallback)
 
 4. Review phase → Code Reviewer after any implementation
@@ -283,22 +286,23 @@ Step 4 → Test Writer: "Generate tests for the push notification subscription f
 
 This matrix defines valid agent-to-agent handoff paths for multi-step workflows:
 
-| From → To              | Context7 | API Architect | Vue Expert | Fastify Expert | PocketBase Expert | Supabase Expert | Azure Functions Expert | C# Expert | Software Engineer | Code Reviewer | Test Writer | Agent Foundry | PWA Expert | Docker Expert |
-| ---------------------- | -------- | ------------- | ---------- | -------------- | ----------------- | --------------- | ---------------------- | --------- | ----------------- | ------------- | ----------- | ------------- | ---------- | ------------- |
-| **Context7-Expert**    | —        | ✅            | ✅         | ✅             | ✅                | ✅              | ✅                     | ✅        | ✅                | ✅            | ✅          | ✅            | ✅         | ✅            |
-| **API Architect**      | ✅       | —             | ✅         | ✅             | ✅                | ✅              | ✅                     | ✅        | ✅                | ✅            | ✅          | —             | ✅         | ✅            |
-| **Vue Expert**         | ✅       | ✅            | —          | ✅             | ✅                | ✅              | —                      | —         | ✅                | ✅            | ✅          | —             | ✅         | —             |
-| **Fastify Expert**     | ✅       | ✅            | ✅         | —              | ✅                | ✅              | ✅                     | —         | ✅                | ✅            | ✅          | —             | ✅         | ✅            |
-| **PocketBase Expert**  | ✅       | ✅            | ✅         | ✅             | —                 | —               | —                      | —         | ✅                | ✅            | ✅          | —             | —          | —             |
-| **Supabase Expert**    | ✅       | ✅            | ✅         | ✅             | —                 | —               | ✅                     | —         | ✅                | ✅            | ✅          | —             | —          | —             |
-| **Azure Funcs Expert** | ✅       | ✅            | —          | ✅             | —                 | ✅              | —                      | ✅        | ✅                | ✅            | ✅          | —             | —          | ✅            |
-| **C# Expert**          | ✅       | ✅            | —          | —              | —                 | —               | ✅                     | —         | ✅                | ✅            | ✅          | —             | —          | —             |
-| **Software Engineer**  | ✅       | ✅            | ✅         | ✅             | ✅                | ✅              | ✅                     | ✅        | —                 | ✅            | ✅          | ✅            | ✅         | ✅            |
-| **Code Reviewer**      | ✅       | —             | —          | —              | —                 | —               | —                      | —         | —                 | —             | ✅          | —             | —          | —             |
-| **Test Writer**        | ✅       | —             | —          | —              | —                 | —               | —                      | —         | —                 | ✅            | —           | —             | —          | —             |
-| **Agent Foundry**      | ✅       | —             | —          | —              | —                 | —               | —                      | —         | ✅                | —             | —           | —             | —          | —             |
-| **PWA Expert**         | ✅       | —             | ✅         | ✅             | —                 | —               | —                      | —         | ✅                | ✅            | ✅          | —             | —          | —             |
-| **Docker Expert**      | ✅       | —             | —          | ✅             | —                 | —               | ✅                     | —         | ✅                | ✅            | —           | —             | —          | —             |
+| From → To              | Context7 | API Architect | Vue Expert | Fastify Expert | PocketBase Expert | Supabase Expert | Azure Functions Expert | C# Expert | Software Engineer | Code Reviewer | Test Writer | Agent Foundry | PWA Expert | Docker Expert | Caddy Expert |
+| ---------------------- | -------- | ------------- | ---------- | -------------- | ----------------- | --------------- | ---------------------- | --------- | ----------------- | ------------- | ----------- | ------------- | ---------- | ------------- | ------------ |
+| **Context7-Expert**    | —        | ✅            | ✅         | ✅             | ✅                | ✅              | ✅                     | ✅        | ✅                | ✅            | ✅          | ✅            | ✅         | ✅            | ✅           |
+| **API Architect**      | ✅       | —             | ✅         | ✅             | ✅                | ✅              | ✅                     | ✅        | ✅                | ✅            | ✅          | —             | ✅         | ✅            | ✅           |
+| **Vue Expert**         | ✅       | ✅            | —          | ✅             | ✅                | ✅              | —                      | —         | ✅                | ✅            | ✅          | —             | ✅         | —             | —            |
+| **Fastify Expert**     | ✅       | ✅            | ✅         | —              | ✅                | ✅              | ✅                     | —         | ✅                | ✅            | ✅          | —             | ✅         | ✅            | ✅           |
+| **PocketBase Expert**  | ✅       | ✅            | ✅         | ✅             | —                 | —               | —                      | —         | ✅                | ✅            | ✅          | —             | —          | —             | —            |
+| **Supabase Expert**    | ✅       | ✅            | ✅         | ✅             | —                 | —               | ✅                     | —         | ✅                | ✅            | ✅          | —             | —          | —             | —            |
+| **Azure Funcs Expert** | ✅       | ✅            | —          | ✅             | —                 | ✅              | —                      | ✅        | ✅                | ✅            | ✅          | —             | —          | ✅            | —            |
+| **C# Expert**          | ✅       | ✅            | —          | —              | —                 | —               | ✅                     | —         | ✅                | ✅            | ✅          | —             | —          | —             | —            |
+| **Software Engineer**  | ✅       | ✅            | ✅         | ✅             | ✅                | ✅              | ✅                     | ✅        | —                 | ✅            | ✅          | ✅            | ✅         | ✅            | ✅           |
+| **Code Reviewer**      | ✅       | —             | —          | —              | —                 | —               | —                      | —         | —                 | —             | ✅          | —             | —          | —             | —            |
+| **Test Writer**        | ✅       | —             | —          | —              | —                 | —               | —                      | —         | —                 | ✅            | —           | —             | —          | —             | —            |
+| **Agent Foundry**      | ✅       | —             | —          | —              | —                 | —               | —                      | —         | ✅                | —             | —           | —             | —          | —             | —            |
+| **PWA Expert**         | ✅       | —             | ✅         | ✅             | —                 | —               | —                      | —         | ✅                | ✅            | ✅          | —             | —          | —             | ✅           |
+| **Docker Expert**      | ✅       | —             | —          | ✅             | —                 | —               | ✅                     | —         | ✅                | ✅            | —           | —             | —          | —             | ✅           |
+| **Caddy Expert**       | ✅       | —             | —          | ✅             | —                 | —               | —                      | —         | ✅                | ✅            | —           | —             | ✅         | ✅            | —            |
 
 **Reading the matrix**: Row = source agent, Column = target agent. ✅ = valid handoff path.
 

@@ -155,3 +155,74 @@ Because all traffic shares the same origin, `VITE_API_URL` and `VITE_SOCKET_URL`
 - **Rebuilding after frontend changes:** Caddy serves the _built_ output, not the dev server. After making frontend changes, re-run `pnpm build:frontend` and reload the browser.
 - **Reloading Caddy config:** If you edit a Caddyfile while Caddy is running, apply the change with `caddy reload --config <filename>` without a full restart.
 - **Trusting the cert on other LAN devices:** `caddy trust` only installs the CA on the local machine. Other devices on your network will see a cert warning unless you manually install Caddy's root CA on them.
+
+---
+
+## Troubleshooting
+
+### Detecting multiple Caddy instances
+
+If requests behave unexpectedly, check whether more than one Caddy process is running:
+
+```sh
+pgrep -fl caddy
+```
+
+Each line shows a PID and the full command, including `--config`. If you see two processes loaded with different config files, one of them is serving stale routes. Kill the unwanted one:
+
+```sh
+kill <PID>
+```
+
+### Checking which config is active
+
+`caddy run` prints the config path at startup, but if you've backgrounded it or lost that output:
+
+```sh
+ps aux | grep '[c]addy'
+```
+
+Look at the `--config` flag in the output. If it says `Caddyfile` but you expected `Caddyfile.full-dev` (or vice versa), you're running the wrong config.
+
+### Detecting stale config
+
+Caddy loads the Caddyfile **once at startup** and does **not** watch the file for changes. If you edit the Caddyfile while Caddy is running, the in-memory config will be stale until you explicitly reload:
+
+```sh
+caddy reload --config Caddyfile.full-dev
+```
+
+A common symptom of stale config is routes returning `405 Method Not Allowed` with `Allow: GET, HEAD` — this means the request is hitting `file_server` instead of `reverse_proxy` because the proxy route doesn't exist in the loaded config.
+
+### Testing a specific route
+
+Use `curl` to verify that a path is reaching the correct upstream:
+
+```sh
+# Should hit reverse_proxy → Supabase, not file_server
+curl -sk "https://192.168.86.20:8443/auth/v1/health" -w "\nHTTP_CODE: %{http_code}\n"
+
+# POST test — if you get 405 Allow: GET, HEAD, the route is hitting file_server
+curl -sk -X POST "https://192.168.86.20:8443/auth/v1/token?grant_type=password" \
+  -w "\nHTTP_CODE: %{http_code}\n"
+```
+
+A `405` from `file_server` looks different from a `405` from the upstream service — `file_server` returns `Allow: GET, HEAD` because it only serves static files.
+
+### Validating config before applying
+
+Always validate before reloading to catch syntax errors:
+
+```sh
+caddy validate --config Caddyfile.full-dev
+```
+
+### Port conflicts
+
+If Caddy fails to start or bind, check what's already listening on the port:
+
+```sh
+lsof -i :8443
+```
+
+This shows the PID and process name of anything bound to port `8443`. Common culprits: a previous Caddy instance that wasn't stopped, or another dev server.
