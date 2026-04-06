@@ -8,8 +8,9 @@ export interface MessageRecord extends BaseRecord {
   content: string;
   channel: string;
   sender: string;
-  type: 'text' | 'system' | 'giphy';
+  type: 'text' | 'system' | 'giphy' | 'image';
   gif_url?: string;
+  image_url?: string;
 }
 
 export type Message = Pick<
@@ -20,6 +21,7 @@ export type Message = Pick<
   | 'sender'
   | 'type'
   | 'gif_url'
+  | 'image_url'
   | 'created_at'
   | 'updated_at'
 >;
@@ -36,8 +38,9 @@ export interface MessageWithSender {
     username: string;
     avatar?: string;
   };
-  type: 'text' | 'system' | 'giphy';
+  type: 'text' | 'system' | 'giphy' | 'image';
   gif_url?: string;
+  image_url?: string;
   created_at: string;
   updated_at: string;
   reactions?: ReactionSummary[];

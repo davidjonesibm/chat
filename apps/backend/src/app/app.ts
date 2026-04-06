@@ -8,6 +8,7 @@ import channelRoutes from './routes/channels';
 import pushRoutes from './routes/push';
 import searchRoutes from './routes/search';
 import inviteRoutes from './routes/invites';
+import imageRoutes from './routes/images';
 import rootRoutes from './routes/root';
 import { registerSharedSchemas } from './schemas';
 
@@ -16,7 +17,7 @@ export async function app(fastify: FastifyInstance) {
   // Note: supabasePlugin and pushPlugin are registered at root level in main.ts
   fastify.register(sensible);
   fastify.register(multipart, {
-    limits: { fileSize: 2 * 1024 * 1024 },
+    limits: { fileSize: 10 * 1024 * 1024 },
   });
   fastify.register(authPlugin);
 
@@ -30,5 +31,6 @@ export async function app(fastify: FastifyInstance) {
   fastify.register(pushRoutes, { prefix: '/push' });
   fastify.register(searchRoutes, { prefix: '/search' });
   fastify.register(inviteRoutes, { prefix: '/invites' });
+  fastify.register(imageRoutes, { prefix: '/images' });
   fastify.register(rootRoutes);
 }

@@ -341,6 +341,28 @@ export function useChat() {
     ws.send(JSON.stringify(message));
   }
 
+  function sendImageMessage(imageUrl: string, caption: string) {
+    const channelId = chatStore.currentChannelId;
+    if (!channelId) return;
+
+    if (ws?.readyState !== WebSocket.OPEN) {
+      useToast().addToast('error', 'Cannot send image while offline');
+      return;
+    }
+
+    const message: ClientMessage = {
+      type: 'message:send',
+      payload: {
+        channelId,
+        content: caption,
+        type: 'image',
+        image_url: imageUrl,
+      },
+    };
+
+    ws.send(JSON.stringify(message));
+  }
+
   function toggleReaction(messageId: string, emoji: string) {
     sendClientMessage({
       type: 'reaction:toggle',
@@ -353,6 +375,7 @@ export function useChat() {
     disconnect,
     sendMessage,
     sendGiphyMessage,
+    sendImageMessage,
     startTyping,
     stopTyping,
     switchChannel,

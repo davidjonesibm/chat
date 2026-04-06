@@ -236,6 +236,22 @@ watch(isMobile, () => {
             </p>
           </div>
 
+          <!-- Image message -->
+          <div v-else-if="message.type === 'image'">
+            <img
+              :src="message.image_url"
+              :alt="message.content || 'Shared image'"
+              loading="lazy"
+              class="rounded-lg max-w-[300px] cursor-pointer"
+            />
+            <p
+              v-if="message.content"
+              class="text-sm text-base-content leading-relaxed mt-1"
+            >
+              {{ message.content }}
+            </p>
+          </div>
+
           <!-- Text message -->
           <p v-else class="text-sm text-base-content leading-relaxed">
             {{ message.content }}

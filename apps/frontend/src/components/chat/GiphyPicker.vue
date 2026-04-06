@@ -8,6 +8,7 @@ const gf = new GiphyFetch(import.meta.env.VITE_GIPHY_API_KEY);
 
 const props = defineProps<{
   visible: boolean;
+  embedded?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -159,7 +160,12 @@ onUnmounted(() => {
   <Transition name="slide-up">
     <div
       v-if="visible"
-      class="absolute bottom-full left-0 right-0 mb-1 z-20 flex flex-col bg-base-200 rounded-t-2xl border border-base-300 shadow-xl max-h-[60vh] sm:max-h-[50vh] overflow-hidden"
+      class="flex flex-col overflow-hidden"
+      :class="
+        embedded
+          ? 'h-full'
+          : 'absolute bottom-full left-0 right-0 mb-1 z-20 bg-base-200 rounded-t-2xl border border-base-300 shadow-xl max-h-[60vh] sm:max-h-[50vh]'
+      "
       role="dialog"
       aria-label="GIF picker"
     >
@@ -245,6 +251,7 @@ onUnmounted(() => {
         <span v-else class="font-semibold text-sm flex-1">Send GIF</span>
 
         <button
+          v-if="!embedded"
           class="btn btn-ghost btn-sm btn-square"
           aria-label="Close GIF picker"
           @click="handleClose"

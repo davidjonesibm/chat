@@ -17,7 +17,11 @@ export async function apiFetch<T>(
   const { addToast } = useToast();
 
   const headers = new Headers(options?.headers);
-  if (!headers.has('Content-Type') && options?.body != null) {
+  if (
+    !headers.has('Content-Type') &&
+    options?.body != null &&
+    !(options.body instanceof FormData)
+  ) {
     headers.set('Content-Type', 'application/json');
   }
   if (authStore.token) {

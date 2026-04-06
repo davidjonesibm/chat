@@ -6,8 +6,9 @@ import type { ReactionTogglePayload, ReactionUpdatedPayload } from './reaction';
 export interface MessageSendPayload {
   channelId: string;
   content: string;
-  type?: 'text' | 'giphy';
+  type?: 'text' | 'giphy' | 'image';
   gif_url?: string;
+  image_url?: string;
 }
 
 export interface MessageNewPayload {

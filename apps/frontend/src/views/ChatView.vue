@@ -5,6 +5,7 @@ import { useChannelStore } from '../stores/channelStore';
 import { useChatStore } from '../stores/chatStore';
 import { useChat } from '../composables/useChat';
 import { useSwipePanel } from '../composables/useSwipePanel';
+import { apiFetch } from '../lib/api';
 import ChannelSidebar from '../components/chat/ChannelSidebar.vue';
 import ChatHeader from '../components/chat/ChatHeader.vue';
 import MessageList from '../components/chat/MessageList.vue';
@@ -24,15 +25,21 @@ const MessageSearch = defineAsyncComponent(
 const ProfileModal = defineAsyncComponent(
   () => import('../components/chat/ProfileModal.vue'),
 );
-const GiphyPicker = defineAsyncComponent(
-  () => import('../components/chat/GiphyPicker.vue'),
+const MediaSheet = defineAsyncComponent(
+  () => import('../components/chat/MediaSheet.vue'),
 );
 
 const route = useRoute();
 const channelStore = useChannelStore();
 const chatStore = useChatStore();
-const { connect, disconnect, sendMessage, sendGiphyMessage, switchChannel } =
-  useChat();
+const {
+  connect,
+  disconnect,
+  sendMessage,
+  sendGiphyMessage,
+  sendImageMessage,
+  switchChannel,
+} = useChat();
 
 // Sidebar toggle (mobile)
 const sidebarOpen = ref(false);
@@ -75,8 +82,8 @@ function onTouchEnd(e: TouchEvent) {
   }
 }
 
-// Giphy picker
-const showGiphyPicker = ref(false);
+// Media sheet
+const showMediaSheet = ref(false);
 
 // Modal state
 const showCreateChannel = ref(false);
@@ -103,13 +110,35 @@ function handleToggleSearch() {
   showSearch.value = !showSearch.value;
 }
 
-function handleToggleGiphy() {
-  showGiphyPicker.value = !showGiphyPicker.value;
+function handleToggleMedia() {
+  showMediaSheet.value = !showMediaSheet.value;
 }
 
 function handleGifSend(payload: { gifUrl: string; caption: string }) {
   sendGiphyMessage(payload.gifUrl, payload.caption);
-  showGiphyPicker.value = false;
+  showMediaSheet.value = false;
+}
+
+async function handleImageSend(payload: { file: File; caption: string }) {
+  const channelId = channelStore.currentChannelId;
+  if (!channelId) return;
+
+  try {
+    const formData = new FormData();
+    formData.append('file', payload.file);
+    formData.append('channelId', channelId);
+
+    const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
+    const { url } = await apiFetch<{ url: string }>(`${baseUrl}/api/images`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    sendImageMessage(url, payload.caption);
+    showMediaSheet.value = false;
+  } catch (err) {
+    console.error('[ChatView] Image upload failed:', err);
+  }
 }
 
 async function handleNavigateToMessage(channelId: string, messageId: string) {
@@ -193,14 +222,15 @@ onUnmounted(() => {
             <ConnectionStatus />
             <MessageList class="flex-1" />
             <div class="relative">
-              <GiphyPicker
-                :visible="showGiphyPicker"
-                @send="handleGifSend"
-                @close="showGiphyPicker = false"
+              <MediaSheet
+                :visible="showMediaSheet"
+                @send-gif="handleGifSend"
+                @send-image="handleImageSend"
+                @close="showMediaSheet = false"
               />
               <MessageInput
                 @send="handleSend"
-                @toggle-giphy="handleToggleGiphy"
+                @toggle-media="handleToggleMedia"
               />
             </div>
           </div>

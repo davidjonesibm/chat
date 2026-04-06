@@ -160,10 +160,21 @@ async function handleMessageSend(
   pushSender?: PushSender,
 ): Promise<void> {
   try {
-    const { channelId, content, type: payloadType, gif_url } = payload;
+    const {
+      channelId,
+      content,
+      type: payloadType,
+      gif_url,
+      image_url,
+    } = payload;
 
     // Determine message type
-    const messageType = payloadType === 'giphy' ? 'giphy' : 'text';
+    const messageType =
+      payloadType === 'giphy'
+        ? 'giphy'
+        : payloadType === 'image'
+          ? 'image'
+          : 'text';
 
     // Validate payload
     if (!channelId || typeof channelId !== 'string') {
@@ -206,6 +217,32 @@ async function handleMessageSend(
         );
         return;
       }
+    } else if (messageType === 'image') {
+      if (!image_url || typeof image_url !== 'string') {
+        console.error('[message:send] Image message missing image_url');
+        return;
+      }
+      if (!image_url.startsWith('https://')) {
+        console.error('[message:send] image_url must start with https://');
+        return;
+      }
+      const allowedPrefix = `${process.env.SUPABASE_URL}/storage/v1/object/public/chat-images/`;
+      if (!image_url.startsWith(allowedPrefix)) {
+        console.error(
+          '[message:send] image_url must be from Supabase chat-images bucket',
+        );
+        ws.send(
+          JSON.stringify({
+            type: 'error',
+            payload: {
+              code: 'INVALID_IMAGE_URL',
+              message: 'Image URL must be from the app storage',
+            },
+          }),
+        );
+        return;
+      }
+      // content (caption) is optional for image messages — no content validation needed
     } else {
       // Text messages require non-empty content
       if (
@@ -229,6 +266,7 @@ async function handleMessageSend(
         sender_id: user.id,
         type: messageType,
         gif_url: messageType === 'giphy' ? gif_url! : null,
+        image_url: messageType === 'image' ? image_url! : null,
       })
       .select('*')
       .single();
@@ -268,6 +306,7 @@ async function handleMessageSend(
           sender: senderData,
           type: messageType,
           gif_url: messageType === 'giphy' ? gif_url : undefined,
+          image_url: messageType === 'image' ? image_url : undefined,
           created_at: message.created_at,
           updated_at: message.updated_at,
           reactions: [],
@@ -354,6 +393,10 @@ async function sendPushToOfflineUsers(
       truncatedContent = messageContent
         ? `sent a GIF: ${messageContent}`
         : 'sent a GIF';
+    } else if (messageType === 'image') {
+      truncatedContent = messageContent
+        ? `sent a photo: ${messageContent}`
+        : 'sent a photo';
     } else {
       truncatedContent =
         messageContent.length > 100

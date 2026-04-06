@@ -6,7 +6,7 @@ import { useChat } from '../../composables/useChat';
 
 const emit = defineEmits<{
   send: [content: string];
-  'toggle-giphy': [];
+  'toggle-media': [];
 }>();
 
 const chatStore = useChatStore();
@@ -74,10 +74,23 @@ function onBlur() {
       <button
         type="button"
         class="btn btn-ghost btn-sm btn-circle"
-        aria-label="Send a GIF"
-        @click="emit('toggle-giphy')"
+        aria-label="Attach media"
+        @click="emit('toggle-media')"
       >
-        GIF
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="w-5 h-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M12 4v16m8-8H4"
+          />
+        </svg>
       </button>
       <button
         type="submit"
