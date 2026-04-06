@@ -6,7 +6,7 @@ import { useChannelStore } from '../../stores/channelStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useChat } from '../../composables/useChat';
 import { useMessageActions } from '../../composables/useMessageActions';
-import MessageBubble from './MessageBubble.vue';
+import Message from './Message.vue';
 import MessageActionSheet from './MessageActionSheet.vue';
 
 const chatStore = useChatStore();
@@ -313,7 +313,7 @@ onUnmounted(() => {
                 messageMetadata[msg.id].dateLabel
               }}</span>
             </div>
-            <MessageBubble
+            <Message
               :message="msg"
               :is-new-sender="messageMetadata[msg.id]?.isNewSender ?? true"
               @react="toggleReaction"

@@ -6,6 +6,7 @@ import MessageActionSheet from './MessageActionSheet.vue';
 import EmojiPickerPopover from './EmojiPickerPopover.vue';
 import { useAuthStore } from '../../stores/authStore';
 import { useMessageActions } from '../../composables/useMessageActions';
+import { toStorageUrl } from '../../lib/supabase';
 
 interface Props {
   message: MessageWithSender;
@@ -239,7 +240,7 @@ watch(isMobile, () => {
           <!-- Image message -->
           <div v-else-if="message.type === 'image'">
             <img
-              :src="message.image_url"
+              :src="toStorageUrl(message.image_url)"
               :alt="message.content || 'Shared image'"
               loading="lazy"
               class="rounded-lg max-w-[300px] cursor-pointer"

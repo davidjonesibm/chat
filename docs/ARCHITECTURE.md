@@ -48,7 +48,7 @@ chat/
 │   │       │   │   ├── ChatView.vue          # Main chat view
 │   │       │   │   ├── MessageList.vue       # Scrollable message list
 │   │       │   │   ├── MessageInput.vue      # Compose & send
-│   │       │   │   ├── MessageBubble.vue     # Individual message
+│   │       │   │   ├── Message.vue           # Individual message
 │   │       │   │   └── ChannelSidebar.vue    # Channel/group list
 │   │       │   └── auth/
 │   │       │       ├── LoginForm.vue
@@ -785,7 +785,7 @@ Regardless of scaling stage, these remain constant:
 | ----------------------- | ------------------------------- | ------------------------------------------------------ |
 | Supabase tables         | `snake_case` (plural)           | `messages`, `group_members`, `profiles`                |
 | TypeScript types        | `PascalCase`                    | `Message`, `Channel`, `ClientMessage`, `ServerMessage` |
-| Vue components          | `PascalCase`                    | `MessageBubble.vue`, `ChatView.vue`                    |
+| Vue components          | `PascalCase`                    | `Message.vue`, `ChatView.vue`                          |
 | Composables             | `camelCase` with `use` prefix   | `useChat`, `useAuth`                                   |
 | Pinia stores            | `camelCase` with `Store` suffix | `chatStore`, `authStore`                               |
 | WebSocket message types | `noun:verb`                     | `message:send`, `typing:start`                         |
