@@ -63,5 +63,4 @@ export interface MessageSearchRequest {
   limit?: number;
 }
 
-export interface MessageSearchResponse
-  extends CursorPaginatedResponse<MessageWithSender> {}
+export type MessageSearchResponse = CursorPaginatedResponse<MessageWithSender>;
