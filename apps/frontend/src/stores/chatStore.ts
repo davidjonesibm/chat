@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
+import { ref, shallowRef } from 'vue';
 import type { MessageWithSender, ReactionSummary } from '@chat/shared';
 
 export const useChatStore = defineStore('chat', () => {
   // State
-  const messages = ref<MessageWithSender[]>([]);
+  const messages = shallowRef<MessageWithSender[]>([]);
   const typingUsers = ref<string[]>([]);
   const onlineUsers = ref<string[]>([]);
   const currentChannelId = ref<string | null>(null);
@@ -22,7 +22,7 @@ export const useChatStore = defineStore('chat', () => {
 
   // Actions
   function addMessage(msg: MessageWithSender) {
-    messages.value.push(msg);
+    messages.value = [...messages.value, msg];
   }
 
   function setMessages(msgs: MessageWithSender[]) {
@@ -56,10 +56,9 @@ export const useChatStore = defineStore('chat', () => {
     messageId: string,
     reactions: ReactionSummary[],
   ) {
-    const msg = messages.value.find((m) => m.id === messageId);
-    if (msg) {
-      msg.reactions = reactions;
-    }
+    messages.value = messages.value.map((m) =>
+      m.id === messageId ? { ...m, reactions } : m,
+    );
   }
 
   function clearChat() {

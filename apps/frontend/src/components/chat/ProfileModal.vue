@@ -1,17 +1,9 @@
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from 'vue';
+import { ref, useTemplateRef, watch, onUnmounted } from 'vue';
 import { useAuthStore } from '../../stores/authStore';
 import UserAvatar from '../ui/UserAvatar.vue';
 
-interface Props {
-  modelValue: boolean;
-}
-
-const props = defineProps<Props>();
-
-const emit = defineEmits<{
-  'update:modelValue': [value: boolean];
-}>();
+const open = defineModel<boolean>({ required: true });
 
 const authStore = useAuthStore();
 
@@ -22,36 +14,33 @@ const previewUrl = ref<string | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
-const fileInput = ref<HTMLInputElement | null>(null);
+const fileInput = useTemplateRef<HTMLInputElement>('fileInput');
 
 const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
 // Reset form when modal opens / load avatar URL
-watch(
-  () => props.modelValue,
-  (isOpen) => {
-    if (isOpen) {
-      username.value = authStore.user?.username ?? '';
-      displayName.value = '';
-      selectedFile.value = null;
-      if (previewUrl.value) {
-        URL.revokeObjectURL(previewUrl.value);
-      }
-      previewUrl.value = null;
-      error.value = null;
-      currentAvatarUrl.value = authStore.user?.avatar ?? null;
-    } else {
-      if (previewUrl.value) {
-        URL.revokeObjectURL(previewUrl.value);
-        previewUrl.value = null;
-      }
+watch(open, (isOpen) => {
+  if (isOpen) {
+    username.value = authStore.user?.username ?? '';
+    displayName.value = '';
+    selectedFile.value = null;
+    if (previewUrl.value) {
+      URL.revokeObjectURL(previewUrl.value);
     }
-  },
-);
+    previewUrl.value = null;
+    error.value = null;
+    currentAvatarUrl.value = authStore.user?.avatar ?? null;
+  } else {
+    if (previewUrl.value) {
+      URL.revokeObjectURL(previewUrl.value);
+      previewUrl.value = null;
+    }
+  }
+});
 
 function close() {
-  emit('update:modelValue', false);
+  open.value = false;
 }
 
 function triggerFileInput() {
@@ -148,7 +137,7 @@ async function handleSubmit() {
 <template>
   <dialog
     class="modal"
-    :class="{ 'modal-open': modelValue }"
+    :class="{ 'modal-open': open }"
     aria-labelledby="profile-title"
     aria-modal="true"
   >

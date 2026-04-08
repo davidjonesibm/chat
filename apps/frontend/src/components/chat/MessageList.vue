@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
+import {
+  ref,
+  useTemplateRef,
+  computed,
+  watch,
+  nextTick,
+  onMounted,
+  onUnmounted,
+} from 'vue';
 import { storeToRefs } from 'pinia';
 import { useChatStore } from '../../stores/chatStore';
 import { useChannelStore } from '../../stores/channelStore';
@@ -37,8 +45,8 @@ const {
 const { currentChannelId } = storeToRefs(channelStore);
 const { user } = storeToRefs(authStore);
 
-const scrollContainer = ref<HTMLElement | null>(null);
-const topSentinel = ref<HTMLElement | null>(null);
+const scrollContainer = useTemplateRef<HTMLElement>('scrollContainer');
+const topSentinel = useTemplateRef<HTMLElement>('topSentinel');
 const isNearBottom = ref(true);
 const isPrepending = ref(false);
 

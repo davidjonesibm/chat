@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, onUnmounted } from 'vue';
+import { computed, ref, useTemplateRef, watch, onUnmounted } from 'vue';
 import type { MessageWithSender } from '@chat/shared';
 import UserAvatar from '../ui/UserAvatar.vue';
 import MessageActionSheet from './MessageActionSheet.vue';
@@ -35,7 +35,7 @@ const touched = ref(false);
 const desktopFullPickerOpen = ref(false);
 const inlinePickerOpen = ref(false);
 const emojiTriggerRect = ref<DOMRect | null>(null);
-const emojiTriggerRef = ref<HTMLElement | null>(null);
+const emojiTriggerRef = useTemplateRef<HTMLElement>('emojiTriggerRef');
 const highlighted = computed(
   () => touched.value || (!isMobile.value && hovered.value),
 );

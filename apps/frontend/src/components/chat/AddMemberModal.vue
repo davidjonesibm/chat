@@ -1,16 +1,14 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue';
+import { ref, useTemplateRef, watch, nextTick } from 'vue';
 import { useChannelStore } from '../../stores/channelStore';
 
-interface Props {
-  modelValue: boolean;
+const props = defineProps<{
   groupId: string;
-}
+}>();
 
-const props = defineProps<Props>();
+const open = defineModel<boolean>({ required: true });
 
 const emit = defineEmits<{
-  'update:modelValue': [value: boolean];
   added: [];
 }>();
 
@@ -19,22 +17,19 @@ const channelStore = useChannelStore();
 const userId = ref('');
 const loading = ref(false);
 const error = ref<string | null>(null);
-const userIdInput = ref<HTMLInputElement | null>(null);
+const userIdInput = useTemplateRef<HTMLInputElement>('userIdInput');
 
 // Reset form when modal opens
-watch(
-  () => props.modelValue,
-  (isOpen) => {
-    if (isOpen) {
-      userId.value = '';
-      error.value = null;
-      nextTick(() => userIdInput.value?.focus());
-    }
-  },
-);
+watch(open, (isOpen) => {
+  if (isOpen) {
+    userId.value = '';
+    error.value = null;
+    nextTick(() => userIdInput.value?.focus());
+  }
+});
 
 function close() {
-  emit('update:modelValue', false);
+  open.value = false;
 }
 
 async function handleSubmit() {
@@ -61,7 +56,7 @@ async function handleSubmit() {
 <template>
   <dialog
     class="modal"
-    :class="{ 'modal-open': modelValue }"
+    :class="{ 'modal-open': open }"
     aria-labelledby="add-member-title"
     aria-modal="true"
   >

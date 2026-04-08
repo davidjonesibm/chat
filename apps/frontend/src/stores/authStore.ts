@@ -9,8 +9,32 @@ import type {
   AvatarUploadResponse,
 } from '@chat/shared';
 import { apiFetch } from '../lib/api';
+import type { User as SupabaseUser, Subscription } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import router from '../router';
+
+interface MapUserDefaults {
+  username?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+function mapSupabaseUser(
+  supaUser: SupabaseUser,
+  defaults?: MapUserDefaults,
+): User {
+  if (!supaUser.email) throw new Error('User email is missing');
+  return {
+    id: supaUser.id,
+    email: supaUser.email,
+    username: supaUser.user_metadata?.username ?? defaults?.username ?? '',
+    avatar: (supaUser.user_metadata?.avatar as string) || '',
+    created_at: supaUser.created_at ?? defaults?.created_at ?? '',
+    updated_at: supaUser.updated_at ?? defaults?.updated_at ?? '',
+  };
+}
+
+let authSubscription: Subscription | null = null;
 
 export const useAuthStore = defineStore('auth', () => {
   // State
@@ -44,17 +68,13 @@ export const useAuthStore = defineStore('auth', () => {
 
       // After signUp with email confirm disabled (local dev), session is immediately available
       if (authData.session && authData.user) {
-        if (!authData.user.email)
-          throw new Error('User email is missing from registration response');
         token.value = authData.session.access_token;
-        user.value = {
-          id: authData.user.id,
-          email: authData.user.email,
-          username: authData.user.user_metadata?.username ?? data.username,
-          avatar: (authData.user.user_metadata?.avatar as string) || '',
-          created_at: authData.user.created_at ?? new Date().toISOString(),
-          updated_at: authData.user.updated_at ?? new Date().toISOString(),
-        };
+        const now = new Date().toISOString();
+        user.value = mapSupabaseUser(authData.user, {
+          username: data.username,
+          created_at: now,
+          updated_at: now,
+        });
       }
     } catch (err: unknown) {
       error.value = err instanceof Error ? err.message : 'Registration failed';
@@ -78,17 +98,8 @@ export const useAuthStore = defineStore('auth', () => {
       if (signInError) throw signInError;
 
       // Store token and user
-      if (!authData.user.email)
-        throw new Error('User email is missing from login response');
       token.value = authData.session.access_token;
-      user.value = {
-        id: authData.user.id,
-        email: authData.user.email,
-        username: authData.user.user_metadata?.username ?? '',
-        avatar: (authData.user.user_metadata?.avatar as string) || '',
-        created_at: authData.user.created_at ?? '',
-        updated_at: authData.user.updated_at ?? '',
-      };
+      user.value = mapSupabaseUser(authData.user);
     } catch (err: unknown) {
       error.value = err instanceof Error ? err.message : 'Login failed';
       throw err;
@@ -117,38 +128,22 @@ export const useAuthStore = defineStore('auth', () => {
       } = await supabase.auth.getSession();
 
       if (session && session.user) {
-        if (!session.user.email)
-          throw new Error('User email is missing from session');
         token.value = session.access_token;
-        user.value = {
-          id: session.user.id,
-          email: session.user.email,
-          username: session.user.user_metadata?.username ?? '',
-          avatar: (session.user.user_metadata?.avatar as string) || '',
-          created_at: session.user.created_at ?? '',
-          updated_at: session.user.updated_at ?? '',
-        };
+        user.value = mapSupabaseUser(session.user);
       }
 
       // Set up auth state change listener for automatic token refresh
-      supabase.auth.onAuthStateChange((_event, session) => {
+      authSubscription?.unsubscribe();
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         if (session && session.user) {
-          if (!session.user.email)
-            throw new Error('User email is missing from session');
           token.value = session.access_token;
-          user.value = {
-            id: session.user.id,
-            email: session.user.email,
-            username: session.user.user_metadata?.username ?? '',
-            avatar: (session.user.user_metadata?.avatar as string) || '',
-            created_at: session.user.created_at ?? '',
-            updated_at: session.user.updated_at ?? '',
-          };
+          user.value = mapSupabaseUser(session.user);
         } else {
           token.value = null;
           user.value = null;
         }
       });
+      authSubscription = subscription;
     } catch (err) {
       console.error('Init auth error:', err);
       user.value = null;

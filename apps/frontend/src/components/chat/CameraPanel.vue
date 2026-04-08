@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, useTemplateRef } from 'vue';
 import { useCamera } from '../../composables/useCamera';
 
 const emit = defineEmits<{
@@ -10,8 +10,8 @@ const { selectedFile, previewUrl, isCompressing, handleFileSelect, clear } =
   useCamera();
 
 const caption = ref('');
-const cameraInput = ref<HTMLInputElement | null>(null);
-const libraryInput = ref<HTMLInputElement | null>(null);
+const cameraInput = useTemplateRef<HTMLInputElement>('cameraInput');
+const libraryInput = useTemplateRef<HTMLInputElement>('libraryInput');
 
 function openCamera() {
   cameraInput.value?.click();
@@ -131,7 +131,11 @@ function handleCaptionKeydown(e: KeyboardEvent) {
   <!-- Preview + caption state (matches GiphyPicker confirm view) -->
   <div v-else class="flex flex-col items-center gap-3 p-4">
     <div class="rounded-lg overflow-hidden bg-base-300 max-w-xs">
-      <img :src="previewUrl!" alt="Selected photo" class="max-w-full h-auto" />
+      <img
+        :src="previewUrl ?? undefined"
+        alt="Selected photo"
+        class="max-w-full h-auto"
+      />
     </div>
 
     <input
