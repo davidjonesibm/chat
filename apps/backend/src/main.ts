@@ -26,6 +26,7 @@ function parseCorsOrigin(): boolean | string | string[] {
 // Instantiate Fastify with some config
 const server = Fastify({
   logger: true,
+  trustProxy: true,
 });
 
 // Register CORS plugin

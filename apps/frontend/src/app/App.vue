@@ -6,17 +6,26 @@ import ToastContainer from '../components/ui/ToastContainer.vue';
 const router = useRouter();
 
 function onSwMessage(event: MessageEvent) {
-  if (event.data?.type === 'NAVIGATE' && typeof event.data.url === 'string') {
-    router.push(event.data.url);
+  if (event.origin && event.origin !== window.location.origin) {
+    return;
+  }
+
+  const url = event.data?.url;
+  if (
+    event.data?.type === 'NAVIGATE' &&
+    typeof url === 'string' &&
+    url.startsWith('/')
+  ) {
+    router.push(url);
   }
 }
 
 onMounted(() => {
-  window.addEventListener('message', onSwMessage);
+  navigator.serviceWorker?.addEventListener('message', onSwMessage);
 });
 
 onUnmounted(() => {
-  window.removeEventListener('message', onSwMessage);
+  navigator.serviceWorker?.removeEventListener('message', onSwMessage);
 });
 </script>
 

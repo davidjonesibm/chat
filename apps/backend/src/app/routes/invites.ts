@@ -35,8 +35,9 @@ export default async function (fastify: FastifyInstance) {
       schema: {
         body: {
           type: 'object',
+          additionalProperties: false,
           properties: {
-            groupId: { type: 'string' },
+            groupId: { type: 'string', maxLength: 36 },
             expiresInHours: { type: 'number', minimum: 1 },
             maxUses: { type: ['integer', 'null'], minimum: 1 },
           },

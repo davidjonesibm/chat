@@ -29,9 +29,10 @@ export default async function (fastify: FastifyInstance) {
       schema: {
         body: {
           type: 'object',
+          additionalProperties: false,
           properties: {
-            name: { type: 'string', minLength: 1 },
-            description: { type: 'string' },
+            name: { type: 'string', minLength: 1, maxLength: 100 },
+            description: { type: 'string', maxLength: 1000 },
           },
           required: ['name'],
         },
@@ -383,8 +384,9 @@ export default async function (fastify: FastifyInstance) {
         },
         body: {
           type: 'object',
+          additionalProperties: false,
           properties: {
-            userId: { type: 'string' },
+            userId: { type: 'string', maxLength: 36 },
           },
           required: ['userId'],
         },

@@ -71,6 +71,7 @@ export const messageSchema = {
       },
     },
     type: { type: 'string' as const },
+    seq: { type: 'integer' as const },
     created_at: { type: 'string' as const },
     updated_at: { type: 'string' as const },
   },

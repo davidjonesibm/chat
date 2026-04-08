@@ -94,10 +94,11 @@ export default async function (fastify: FastifyInstance) {
       schema: {
         body: {
           type: 'object',
+          additionalProperties: false,
           properties: {
-            name: { type: 'string', minLength: 1 },
-            groupId: { type: 'string' },
-            description: { type: 'string' },
+            name: { type: 'string', minLength: 1, maxLength: 100 },
+            groupId: { type: 'string', maxLength: 36 },
+            description: { type: 'string', maxLength: 1000 },
           },
           required: ['name', 'groupId'],
         },
@@ -223,6 +224,7 @@ export default async function (fastify: FastifyInstance) {
                     },
                     gif_url: { type: 'string' },
                     image_url: { type: 'string' },
+                    seq: { type: 'integer' },
                     created_at: { type: 'string' },
                     updated_at: { type: 'string' },
                     reactions: {
@@ -294,8 +296,9 @@ export default async function (fastify: FastifyInstance) {
         .eq('channel_id', channelId);
 
       if (cursor) {
-        // Fetch messages older than cursor timestamp
-        query = query.lt('created_at', cursor);
+        // Restore '+' in timezone offset that URL-decoding converted to a space
+        const safeCursor = cursor.replace(/ /g, '+');
+        query = query.lt('created_at', safeCursor);
       }
 
       // Always order by created_at descending (newest first from query perspective)
@@ -398,6 +401,7 @@ export default async function (fastify: FastifyInstance) {
             type: msg.type as 'text' | 'system' | 'giphy' | 'image',
             gif_url: msg.gif_url ?? undefined,
             image_url: msg.image_url ?? undefined,
+            seq: msg.seq,
             created_at: msg.created_at,
             updated_at: msg.updated_at,
             reactions: reactionsMap[msg.id] ?? [],
@@ -462,16 +466,22 @@ export default async function (fastify: FastifyInstance) {
         );
       }
 
-      // Verify user is a member of the group
-      const { data: membership } = await fastify.supabaseAdmin
-        .from('group_members')
-        .select('user_id')
-        .eq('group_id', channel.group_id)
-        .eq('user_id', requireUser(request).id)
+      // Verify user is the group owner
+      const { data: group, error: groupError } = await fastify.supabaseAdmin
+        .from('groups')
+        .select('owner_id')
+        .eq('id', channel.group_id)
         .single();
 
-      if (!membership) {
-        throw fastify.httpErrors.forbidden('Not a member of this group');
+      if (groupError || !group) {
+        fastify.log.error(groupError);
+        throw fastify.httpErrors.internalServerError('Failed to fetch group');
+      }
+
+      if (group.owner_id !== requireUser(request).id) {
+        throw fastify.httpErrors.forbidden(
+          'Only the group owner can delete channels',
+        );
       }
 
       // Delete the channel

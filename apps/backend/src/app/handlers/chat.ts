@@ -37,6 +37,60 @@ const typingTimeouts = new Map<string, NodeJS.Timeout>();
 // Track online users per channel: channelId -> Set<userId>
 const onlineUsers = new Map<string, Set<string>>();
 
+// --- M3: WS Message Validation ---
+
+const VALID_CLIENT_MESSAGE_TYPES = new Set<string>([
+  'message:send',
+  'typing:start',
+  'typing:stop',
+  'channel:join',
+  'channel:leave',
+  'reaction:toggle',
+]);
+
+function isValidClientMessage(data: unknown): data is ClientMessage {
+  if (data === null || typeof data !== 'object') return false;
+  const msg = data as Record<string, unknown>;
+  if (typeof msg.type !== 'string' || !VALID_CLIENT_MESSAGE_TYPES.has(msg.type))
+    return false;
+  if (msg.payload === null || typeof msg.payload !== 'object') return false;
+  return true;
+}
+
+// --- M4: WS Rate Limiting (Token Bucket per Socket) ---
+
+class TokenBucket {
+  private tokens: number;
+  private lastRefill: number;
+
+  constructor(
+    private readonly maxTokens: number = 30,
+    private readonly refillRate: number = 10,
+  ) {
+    this.tokens = maxTokens;
+    this.lastRefill = Date.now();
+  }
+
+  refill(): void {
+    const now = Date.now();
+    const elapsed = (now - this.lastRefill) / 1000;
+    this.tokens = Math.min(
+      this.maxTokens,
+      this.tokens + elapsed * this.refillRate,
+    );
+    this.lastRefill = now;
+  }
+
+  consume(): boolean {
+    this.refill();
+    if (this.tokens < 1) return false;
+    this.tokens -= 1;
+    return true;
+  }
+}
+
+const socketBuckets = new Map<WebSocket, TokenBucket>();
+
 /**
  * Get all currently online user IDs across all channels
  */
@@ -96,6 +150,49 @@ function leaveRoom(ws: WebSocket, channelId: string): void {
   socketChannels.get(ws)?.delete(channelId);
 }
 
+// --- C1/C2: Channel membership verification helper ---
+
+type MembershipResult =
+  | { ok: true; groupId: string }
+  | { ok: false; code: string; message: string };
+
+async function verifyChannelMembership(
+  supabase: SupabaseClient<Database>,
+  channelId: string,
+  userId: string,
+): Promise<MembershipResult> {
+  const { data: channel } = await supabase
+    .from('channels')
+    .select('group_id')
+    .eq('id', channelId)
+    .single();
+
+  if (!channel) {
+    return {
+      ok: false,
+      code: 'CHANNEL_NOT_FOUND',
+      message: 'Channel not found',
+    };
+  }
+
+  const { data: membership } = await supabase
+    .from('group_members')
+    .select('user_id')
+    .eq('group_id', channel.group_id)
+    .eq('user_id', userId)
+    .single();
+
+  if (!membership) {
+    return {
+      ok: false,
+      code: 'FORBIDDEN',
+      message: 'Not a member of this group',
+    };
+  }
+
+  return { ok: true, groupId: channel.group_id };
+}
+
 /**
  * Handle incoming WebSocket messages
  */
@@ -107,7 +204,52 @@ async function handleMessage(
   pushSender?: PushSender,
 ): Promise<void> {
   try {
-    const clientMessage: ClientMessage = JSON.parse(data);
+    // M4: Rate limiting
+    const bucket = socketBuckets.get(ws);
+    if (bucket && !bucket.consume()) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          payload: {
+            code: 'RATE_LIMITED',
+            message: 'Too many messages, slow down',
+          },
+        }),
+      );
+      return;
+    }
+
+    // M3: Validate incoming message
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(data);
+    } catch {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          payload: {
+            code: 'INVALID_MESSAGE',
+            message: 'Invalid message format',
+          },
+        }),
+      );
+      return;
+    }
+
+    if (!isValidClientMessage(parsed)) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          payload: {
+            code: 'INVALID_MESSAGE',
+            message: 'Invalid message format',
+          },
+        }),
+      );
+      return;
+    }
+
+    const clientMessage = parsed;
 
     switch (clientMessage.type) {
       case 'message:send':
@@ -129,7 +271,7 @@ async function handleMessage(
         break;
 
       case 'channel:join':
-        handleChannelJoin(ws, clientMessage.payload, user);
+        await handleChannelJoin(ws, clientMessage.payload, user, supabase);
         break;
 
       case 'channel:leave':
@@ -179,6 +321,25 @@ async function handleMessageSend(
     // Validate payload
     if (!channelId || typeof channelId !== 'string') {
       console.error('[message:send] Invalid channelId');
+      return;
+    }
+
+    // C2: Verify sender is a member of the channel's group
+    const membershipResult = await verifyChannelMembership(
+      supabase,
+      channelId,
+      user.id,
+    );
+    if (!membershipResult.ok) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          payload: {
+            code: membershipResult.code,
+            message: membershipResult.message,
+          },
+        }),
+      );
       return;
     }
 
@@ -307,6 +468,7 @@ async function handleMessageSend(
           type: messageType,
           gif_url: messageType === 'giphy' ? gif_url : undefined,
           image_url: messageType === 'image' ? image_url : undefined,
+          seq: message.seq,
           created_at: message.created_at,
           updated_at: message.updated_at,
           reactions: [],
@@ -549,16 +711,36 @@ function handleTypingStop(
 /**
  * Handle channel:join event
  */
-function handleChannelJoin(
+async function handleChannelJoin(
   ws: WebSocket,
   payload: ChannelPayload,
   user: WsUser,
-): void {
+  supabase: SupabaseClient<Database>,
+): Promise<void> {
   try {
     const { channelId } = payload;
 
     if (!channelId || typeof channelId !== 'string') {
       console.error('[channel:join] Invalid channelId');
+      return;
+    }
+
+    // C1: Verify user is a member of the channel's group
+    const membershipResult = await verifyChannelMembership(
+      supabase,
+      channelId,
+      user.id,
+    );
+    if (!membershipResult.ok) {
+      ws.send(
+        JSON.stringify({
+          type: 'error',
+          payload: {
+            code: membershipResult.code,
+            message: membershipResult.message,
+          },
+        }),
+      );
       return;
     }
 
@@ -665,7 +847,7 @@ async function handleReactionToggle(
       .eq('id', messageId)
       .single();
 
-    if (!msg) {
+    if (!msg || !msg.channel_id) {
       return;
     }
 
@@ -834,6 +1016,7 @@ function handleDisconnect(ws: WebSocket, user: WsUser): void {
     // Clean up user tracking
     socketUsers.delete(ws);
     socketChannels.delete(ws);
+    socketBuckets.delete(ws);
   }
 }
 
@@ -851,6 +1034,7 @@ export function handleWebSocketConnection(
   // Track user for this socket
   socketUsers.set(socket, user);
   socketChannels.set(socket, new Set());
+  socketBuckets.set(socket, new TokenBucket());
 
   // Handle incoming messages
   socket.on('message', (data: Buffer) => {

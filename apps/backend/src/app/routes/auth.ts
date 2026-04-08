@@ -46,10 +46,11 @@ export default async function (fastify: FastifyInstance) {
       schema: {
         body: {
           type: 'object',
+          additionalProperties: false,
           properties: {
-            email: { type: 'string', format: 'email' },
-            password: { type: 'string', minLength: 8 },
-            username: { type: 'string', minLength: 1 },
+            email: { type: 'string', format: 'email', maxLength: 320 },
+            password: { type: 'string', minLength: 8, maxLength: 128 },
+            username: { type: 'string', minLength: 1, maxLength: 100 },
           },
           required: ['email', 'password', 'username'],
         },
@@ -130,9 +131,10 @@ export default async function (fastify: FastifyInstance) {
       schema: {
         body: {
           type: 'object',
+          additionalProperties: false,
           properties: {
-            email: { type: 'string', format: 'email' },
-            password: { type: 'string', minLength: 1 },
+            email: { type: 'string', format: 'email', maxLength: 320 },
+            password: { type: 'string', minLength: 1, maxLength: 128 },
           },
           required: ['email', 'password'],
         },
@@ -234,10 +236,11 @@ export default async function (fastify: FastifyInstance) {
       schema: {
         body: {
           type: 'object',
+          additionalProperties: false,
           properties: {
-            username: { type: 'string', minLength: 1 },
-            name: { type: 'string', minLength: 1 },
-            avatar: { type: 'string' },
+            username: { type: 'string', minLength: 1, maxLength: 100 },
+            name: { type: 'string', minLength: 1, maxLength: 100 },
+            avatar: { type: 'string', maxLength: 2048 },
           },
           anyOf: [
             { required: ['username'] },

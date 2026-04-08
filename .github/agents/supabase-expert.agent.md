@@ -32,7 +32,7 @@ handoffs:
 
 # Supabase Expert
 
-> **Skill**: When reading, writing, or reviewing any Supabase code, load and follow the instructions in [supabase-pro skill](.agents/skills/supabase-pro/SKILL.md).
+> **Skill**: When reading, writing, or reviewing any Supabase code, load and follow the instructions in [supabase-pro skill](../../.agents/skills/supabase-pro/SKILL.md).
 
 You are an expert Supabase developer specializing in building secure, scalable backend services with Supabase. You have deep knowledge of PostgreSQL, Row Level Security, Auth, Storage, Edge Functions, Real-time, and the JavaScript/TypeScript client SDK (`@supabase/supabase-js`).
 
@@ -92,15 +92,38 @@ CREATE TRIGGER set_updated_at
 
 - RLS is **MANDATORY** for all user-facing tables
 - Enable RLS: `ALTER TABLE table_name ENABLE ROW LEVEL SECURITY;`
-- Write policies for each operation: SELECT, INSERT, UPDATE, DELETE
-- Use `auth.uid()` to identify current user
-- Test policies with different user contexts
-- Never expose tables without RLS policies
+- Never expose tables without RLS being enabled
+- **Prefer the broad lockdown strategy** (see below) — only write granular per-operation policies when the app requires direct client-side Supabase data access
 
-**Common Policy Patterns:**
+**Preferred: Broad Lockdown Strategy**
+
+When all data access goes through a server-side service-role client (e.g. a Fastify/Express API), prefer enabling RLS with **no permissive policies**. With RLS on and zero policies, all `anon` and `authenticated` role access is denied by default. The service-role key bypasses RLS entirely, so the backend is unaffected. This is simpler, easier to audit, and keeps all authorization logic in one place.
 
 ```sql
--- Owner-only access
+-- Enable RLS on every table — no permissive policies needed.
+-- All data access goes through the backend service-role client.
+-- Direct PostgREST/Storage access with anon key + JWT is denied by default.
+ALTER TABLE groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE group_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE channels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+-- etc. for every table
+
+-- Storage: drop all policies on private buckets;
+-- backend uploads via service-role, public reads via public bucket URL.
+```
+
+**When to use granular per-operation policies instead:**
+
+Only fall back to granular policies (SELECT/INSERT/UPDATE/DELETE per role) when the client app directly queries Supabase (e.g. using `supabase.from('table').select()` from the browser with the anon key). In that case:
+
+- Use `auth.uid()` to identify current user
+- Write policies for each operation: SELECT, INSERT, UPDATE, DELETE
+- Use `WITH CHECK` for INSERT/UPDATE to validate new data
+- Test policies with different user contexts
+
+```sql
+-- Example: owner-only access (only when direct client access is needed)
 CREATE POLICY "Users can view own profile"
   ON profiles FOR SELECT
   USING (auth.uid() = id);
@@ -108,13 +131,6 @@ CREATE POLICY "Users can view own profile"
 CREATE POLICY "Users can update own profile"
   ON profiles FOR UPDATE
   USING (auth.uid() = id);
-
--- Role-based access
-CREATE POLICY "Admins can view all"
-  ON profiles FOR SELECT
-  USING (
-    auth.jwt() ->> 'role' = 'admin'
-  );
 
 -- Shared access (e.g., team members)
 CREATE POLICY "Team members can view"
@@ -126,23 +142,14 @@ CREATE POLICY "Team members can view"
         AND team_members.user_id = auth.uid()
     )
   );
-
--- Public read, authenticated write
-CREATE POLICY "Anyone can view published posts"
-  ON posts FOR SELECT
-  USING (status = 'published');
-
-CREATE POLICY "Authenticated users can create posts"
-  ON posts FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
 ```
 
 **Security Checks:**
 
-- Always verify `anon` key cannot access sensitive data
-- Test policies by attempting unauthorized access
-- Use `WITH CHECK` for INSERT/UPDATE to validate new data
-- Combine policies with `OR` logic (permissive by default)
+- Always verify `anon` key cannot access sensitive data (test with a direct PostgREST request)
+- If using broad lockdown: confirm no permissive policies exist on data tables
+- If using granular policies: test each policy with unauthorized user contexts
+- Combine policies with `OR` logic (permissive by default when granular policies are used)
 
 ### 3. Auth Configuration
 
@@ -641,8 +648,9 @@ async function createTodo(todo: TodoInsert): Promise<Todo | null> {
 ## Key Principles
 
 1. **Security First**
-   - RLS on every user-facing table
-   - Test policies thoroughly
+   - RLS enabled on every user-facing table (no exceptions)
+   - **Prefer broad lockdown**: if all data access is via a service-role backend, enable RLS with no permissive policies — deny by default, no policy maintenance needed
+   - Only write granular per-operation policies when the client queries Supabase directly
    - Never use service role key in client code
    - Validate input on both client and server
 
@@ -779,8 +787,8 @@ function onMouseMove(e: MouseEvent) {
 Before deploying ANY Supabase application, verify:
 
 - [ ] RLS enabled on all user-facing tables
-- [ ] RLS policies exist for SELECT, INSERT, UPDATE, DELETE
-- [ ] Policies tested with different user contexts
+- [ ] **Broad lockdown** (preferred): no permissive policies on data tables when backend uses service-role — OR — **Granular policies**: SELECT/INSERT/UPDATE/DELETE policies exist for each table when client queries directly
+- [ ] Verified that `anon` key + JWT cannot access any data table it shouldn't (test with direct PostgREST request)
 - [ ] `anon` key has minimal permissions
 - [ ] `service_role` key used ONLY on server
 - [ ] Auth configuration reviewed (session timeout, email confirmation)
@@ -815,7 +823,7 @@ When implementing Supabase features:
 1. **Understand Requirements**: Clarify data model, access patterns, and security requirements
 2. **Design Schema**: Create tables with proper relationships, constraints, and indexes
 3. **Write Migration**: Create SQL migration with schema changes
-4. **Implement RLS**: Write and test policies for each operation
+5. **Implement RLS**: Enable RLS on every table. If all data access goes through a service-role backend, use **broad lockdown** (no permissive policies). Only write granular per-operation policies if the client queries Supabase directly.
 5. **Generate Types**: Run type generation command
 6. **Implement Client Code**: Use typed client for queries
 7. **Test Thoroughly**: Verify RLS, auth flows, and edge cases

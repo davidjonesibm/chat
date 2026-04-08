@@ -70,16 +70,19 @@ export default async function (fastify: FastifyInstance) {
       schema: {
         body: {
           type: 'object',
+          additionalProperties: false,
           properties: {
             subscription: {
               type: 'object',
+              additionalProperties: false,
               properties: {
-                endpoint: { type: 'string' },
+                endpoint: { type: 'string', maxLength: 2048 },
                 keys: {
                   type: 'object',
+                  additionalProperties: false,
                   properties: {
-                    p256dh: { type: 'string' },
-                    auth: { type: 'string' },
+                    p256dh: { type: 'string', maxLength: 512 },
+                    auth: { type: 'string', maxLength: 512 },
                   },
                   required: ['p256dh', 'auth'],
                 },
@@ -111,6 +114,36 @@ export default async function (fastify: FastifyInstance) {
 
       const userId = requireUser(request).id;
       const { subscription } = request.body;
+
+      // Validate push endpoint URL to prevent SSRF
+      let endpointUrl: URL;
+      try {
+        endpointUrl = new URL(subscription.endpoint);
+      } catch {
+        throw fastify.httpErrors.badRequest('Push endpoint URL is malformed');
+      }
+
+      if (endpointUrl.protocol !== 'https:') {
+        throw fastify.httpErrors.badRequest('Push endpoint must use HTTPS');
+      }
+
+      const ALLOWED_PUSH_DOMAINS = [
+        'fcm.googleapis.com',
+        'updates.push.services.mozilla.com',
+        'wns.windows.com',
+        'web.push.apple.com',
+      ];
+
+      const hostname = endpointUrl.hostname.toLowerCase();
+      const isAllowed = ALLOWED_PUSH_DOMAINS.some(
+        (domain) => hostname === domain || hostname.endsWith(`.${domain}`),
+      );
+
+      if (!isAllowed) {
+        throw fastify.httpErrors.badRequest(
+          'Push endpoint is not a recognized push service',
+        );
+      }
 
       // Upsert push subscription
       const { error } = await fastify.supabaseAdmin
@@ -160,8 +193,9 @@ export default async function (fastify: FastifyInstance) {
       schema: {
         body: {
           type: 'object',
+          additionalProperties: false,
           properties: {
-            endpoint: { type: 'string' },
+            endpoint: { type: 'string', maxLength: 2048 },
           },
           required: ['endpoint'],
         },
