@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import ToastContainer from '../components/ui/ToastContainer.vue';
+import PwaUpdatePrompt from '../components/ui/PwaUpdatePrompt.vue';
 
 const router = useRouter();
 
@@ -37,4 +38,5 @@ onUnmounted(() => {
   >
   <RouterView />
   <ToastContainer />
+  <PwaUpdatePrompt />
 </template>

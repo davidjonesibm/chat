@@ -10,7 +10,7 @@ function envReporterPlugin(): import('vite').Plugin {
   return {
     name: 'env-reporter',
     configResolved(config) {
-      const dir = config.envDir ?? config.root;
+      const dir = config.envDir || config.root;
       const candidates = [
         '.env',
         '.env.local',
@@ -39,7 +39,7 @@ export default defineConfig(async () => {
     }),
     tsconfigPaths(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'service-worker.ts',
@@ -60,14 +60,16 @@ export default defineConfig(async () => {
             src: '/icons/icon-192x192.png',
             sizes: '192x192',
             type: 'image/png',
+            purpose: 'any',
           },
           {
             src: '/icons/icon-512x512.png',
             sizes: '512x512',
             type: 'image/png',
+            purpose: 'any',
           },
           {
-            src: '/icons/icon-512x512.png',
+            src: '/icons/icon-512x512-maskable.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable',
