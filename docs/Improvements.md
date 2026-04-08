@@ -125,8 +125,8 @@ _Fixes H5–H11, M14–M16, H8–H9_
 - Migration: add `NOT NULL` to `messages.channel_id`
 - Migration: add `updated_at` auto-update triggers
 - Migration: add `ON CONFLICT` to `handle_new_user()` trigger
-- Fix `message_reactions` INSERT policy (add membership check)
-- Enable email confirmation and strengthen password policy in `config.toml`
+- Fix `message_reactions` INSERT policy (add membership check) ❌
+- Enable email confirmation and strengthen password policy in `config.toml` ❌
 
 ### Phase 3: PWA Fixes (Critical + High PWA)
 

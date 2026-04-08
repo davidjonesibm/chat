@@ -60,6 +60,7 @@ export default async function (fastify: FastifyInstance) {
                     },
                     gif_url: { type: 'string' },
                     image_url: { type: 'string' },
+                    seq: { type: 'integer' },
                     created_at: { type: 'string' },
                     updated_at: { type: 'string' },
                   },
@@ -180,7 +181,7 @@ export default async function (fastify: FastifyInstance) {
 
       let senderProfiles: Record<
         string,
-        { id: string; username: string; avatar: string | null }
+        { id: string; username: string | null; avatar: string | null }
       > = {};
 
       if (senderIds.length > 0) {
@@ -208,7 +209,7 @@ export default async function (fastify: FastifyInstance) {
         return {
           id: msg.id,
           content: msg.content,
-          channel: msg.channel_id || '',
+          channel: msg.channel_id,
           sender: {
             id: msg.sender_id || '',
             username: profile?.username || 'Unknown',
@@ -217,6 +218,7 @@ export default async function (fastify: FastifyInstance) {
           type: msg.type as 'text' | 'system' | 'giphy' | 'image',
           gif_url: msg.gif_url ?? undefined,
           image_url: msg.image_url ?? undefined,
+          seq: msg.seq,
           created_at: msg.created_at,
           updated_at: msg.updated_at,
         };

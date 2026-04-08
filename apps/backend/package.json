@@ -8,7 +8,9 @@
     "lint": "eslint .",
     "db-start": "supabase start",
     "db-stop": "supabase stop",
-    "db-types": "bash -c 'ref=${PROJECT_REF:-}; [ -z \"$ref\" ] && read -p \"Supabase project ref: \" ref; npx supabase gen types typescript --project-id \"$ref\" --schema public > database.types.ts' && cd ../../ &&pnpm format"
+    "db-push": "supabase db push",
+    "db-types": "bash -c 'ref=${PROJECT_REF:-}; [ -z \"$ref\" ] && read -p \"Supabase project ref: \" ref; npx supabase gen types typescript --project-id \"$ref\" --schema public > database.types.ts'",
+    "db-types:local": "npx supabase gen types typescript --local --schema public > database.types.ts"
   },
   "dependencies": {
     "@chat/shared": "workspace:*",

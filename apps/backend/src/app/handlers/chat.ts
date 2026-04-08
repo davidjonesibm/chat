@@ -847,7 +847,7 @@ async function handleReactionToggle(
       .eq('id', messageId)
       .single();
 
-    if (!msg || !msg.channel_id) {
+    if (!msg) {
       return;
     }
 

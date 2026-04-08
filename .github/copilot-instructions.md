@@ -76,6 +76,16 @@ applyTo: '**'
 - **`null` → `undefined` for DOM bindings**: Use `?? undefined` (e.g., `:src="url ?? undefined"`).
 - **Guard before action**: Use early returns (e.g., `if (!id) return;`) before using nullable values.
 
+## Validation
+
+After any code change, **always** run the following checks before considering the task complete:
+
+1. **Type-check**: `pnpm --filter @chat/backend exec tsc --noEmit` and `pnpm --filter @chat/frontend exec vue-tsc --noEmit`
+2. **Build**: `pnpm build`
+3. **Lint**: `pnpm lint`
+
+Never rely solely on build success — `tsc --noEmit` catches type errors that the build toolchain (esbuild, Vite) silently ignores.
+
 ## Do NOT
 
 - Query Supabase directly from the frontend (except auth).

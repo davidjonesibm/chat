@@ -81,6 +81,16 @@ pnpm build:frontend                   # build frontend only
 pnpm build:backend                    # build backend only
 ```
 
+### Database types
+
+After any schema change, regenerate the Supabase TypeScript types from the **local** Supabase instance (must be running):
+
+```bash
+pnpm --filter @chat/backend db-types:local
+```
+
+Always use `db-types:local` and commit the result. This avoids formatting inconsistencies between CLI versions when generating from a remote project. A `db-types` script exists for remote generation but should only be used as a fallback.
+
 ### Testing & Linting
 
 ```bash

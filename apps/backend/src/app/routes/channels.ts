@@ -329,7 +329,7 @@ export default async function (fastify: FastifyInstance) {
 
       let senderProfiles: Record<
         string,
-        { id: string; username: string; avatar: string | null }
+        { id: string; username: string | null; avatar: string | null }
       > = {};
 
       if (senderIds.length > 0) {
@@ -392,7 +392,7 @@ export default async function (fastify: FastifyInstance) {
           return {
             id: msg.id,
             content: msg.content,
-            channel: msg.channel_id || '',
+            channel: msg.channel_id,
             sender: {
               id: msg.sender_id || '',
               username: profile?.username || 'Unknown',
