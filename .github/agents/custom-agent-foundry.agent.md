@@ -153,6 +153,10 @@ When creating a custom agent:
 4. **Review**: Explain design decisions and invite feedback
 5. **Refine**: Iterate based on user input
 6. **Document**: Provide usage examples and tips
+7. **Register in RUG** *(mandatory)*: After every agent creation or rename, update `.github/agents/rug-orchestrator.agent.md`:
+   - Add the agent's display name (`name:` field) to the `agents: [...]` frontmatter array
+   - Add a row to the **Specialist Agent Roster** table describing exactly when RUG should route to this agent
+   - Use the same precision and specificity as existing rows in the table
 
 ## Quality Checklist
 
@@ -166,6 +170,7 @@ Before finalizing a custom agent, verify:
 - ✅ Handoffs defined (if part of workflow)
 - ✅ Consistent with VS Code best practices
 - ✅ Tested or testable design
+- ✅ **RUG orchestrator updated** — agent registered in `agents:` frontmatter array and decision matrix table in `rug-orchestrator.agent.md`
 
 ## Output Format
 

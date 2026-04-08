@@ -40,7 +40,6 @@ agents:
   [
     'Context7-Expert',
     'API Architect',
-    'C# Expert',
     'Expert Vue.js Frontend Engineer',
     'Software Engineer Agent',
     'Code Reviewer',
@@ -48,11 +47,16 @@ agents:
     'Fastify Expert',
     'Supabase Expert',
     'PocketBase Expert',
-    'Azure Functions Expert',
     'Custom Agent Foundry',
+    'Skill Foundry',
     'PWA Expert',
     'Docker Expert',
     'Caddy Expert',
+    'SwiftUI Expert',
+    'Flutter Expert',
+    'Android Kotlin Expert',
+    'Mobile UI/UX Expert',
+    'App Store Deployment Expert',
   ]
 ---
 
@@ -111,6 +115,7 @@ RUG = **Repeat Until Good**. This is your operating loop:
    - Break complex work into subagent-sized pieces
    - Identify dependencies and ordering
    - Specify acceptance criteria for each task
+   - If the request is a bug report, follow the Bug Diagnosis Protocol (Section 15)
 
 2. CREATE a todo list tracking every task
    - Use manage_todo_list to initialize
@@ -183,20 +188,24 @@ Using the wrong agent (or a generic one when a specialist exists) is a failure o
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Context7-Expert**                 | Any question involving a specific library, framework, or package. Library best practices, version upgrades, correct API syntax, migration guidance. Use BEFORE implementation whenever tech choices or library usage is in scope.                                                                                                                                    |
 | **API Architect**                   | Designing or building API connectivity: HTTP clients, service/manager/resilience layers, circuit breakers, retries, DTOs. When task involves building a client that calls an external service.                                                                                                                                                                       |
-| **C# Expert**                       | ALL .NET and C# work: ASP.NET Core, class libraries, DI, async/await, EF, testing. ANY task touching .cs, .csproj, or .NET-specific concerns.                                                                                                                                                                                                                        |
 | **Expert Vue.js Frontend Engineer** | All Vue.js work: components, composables, Pinia stores, Vue Router, reactivity, TypeScript, forms, validation, testing. ANY task touching .vue files or frontend Vue code.                                                                                                                                                                                           |
 | **Fastify Expert**                  | ALL Fastify backend work: route handlers, plugins, hooks, schemas, serialization, authentication, error handling. ANY task touching the apps/backend/ Fastify server code.                                                                                                                                                                                           |
 | **Supabase Expert**                 | ALL Supabase work: database schema, auth, storage, edge functions, real-time, RLS, client SDK, migrations.                                                                                                                                                                                                                                                           |
 | **PocketBase Expert**               | ALL PocketBase work: collections, API rules, hooks, migrations, auth, SDK integration. ANY task touching pocketbase/ directory or PocketBase client code.                                                                                                                                                                                                            |
-| **Azure Functions Expert**          | ALL Azure Functions work: triggers, bindings, deployment, Durable Functions, timer/queue triggers. ANY serverless Azure compute task.                                                                                                                                                                                                                                |
 | **Code Reviewer**                   | Post-implementation review of any code. Security audit, correctness checks, style consistency, performance review. Launch AFTER implementation to validate quality.                                                                                                                                                                                                  |
 | **Test Writer**                     | Test generation: Vitest unit tests, Vue component tests, API route tests, composable tests. Launch AFTER implementation when tests are needed.                                                                                                                                                                                                                       |
 | **Software Engineer Agent**         | FALLBACK ONLY. Use when no other specialist matches. General implementation, build scripts, configuration, monorepo tooling.                                                                                                                                                                                                                                         |
 | **Custom Agent Foundry**            | Creating or modifying VS Code custom agent files (.agent.md). Use when the task involves agent design.                                                                                                                                                                                                                                                               |
 | **PWA Expert**                      | ALL Progressive Web App work: service workers, web app manifests, offline strategies, push notifications, background sync, Workbox configuration, vite-plugin-pwa, PWA installability, Core Web Vitals for PWAs. ANY task where keywords are: offline, service worker, SW, manifest, installable, push notification, background sync, workbox, vite-plugin-pwa, pwa. |
 | **Custom Agent Foundry**            | ALL work on VS Code agent customization files: `.agent.md`, `.instructions.md`, `.prompt.md`, `SKILL.md`, `copilot-instructions.md`. This includes initial creation, edits after Code Reviewer FAIL, updates/improvements, debugging why agents aren't being invoked, and fixing YAML frontmatter syntax. NEVER route agent file editing to Software Engineer Agent. |
+| **Skill Foundry**                   | Building new agent skills from documentation or best-practice research. Use when the user wants to create a SKILL.md + reference files for a library, framework, or platform. Ingests docs via Context7 or web fetch and produces structured, actionable skill packages. Route here for: "build a skill for X", "create best-practice references for Y", "make a deprecation audit skill". |
 | **Docker Expert**                   | ALL Docker and container work: Dockerfiles, multi-stage builds, Docker Compose configs, `.dockerignore`, container networking, volumes, security hardening, image optimization, and production deployment patterns. ANY task touching `Dockerfile`, `docker-compose*.yml`, or container infrastructure.                                                              |
 | **Caddy Expert**                    | ALL Caddy web server work: Caddyfile syntax and configuration, reverse proxying, TLS (including `tls internal` for LAN dev), request matchers, response headers, cache-control, static file serving, SPA/PWA fallback routing, multi-service gateway routing. ANY task touching `Caddyfile`, `Caddyfile.*`, or Caddy configuration.                                  |
+| **SwiftUI Expert**                  | ALL native Apple platform work: iOS, macOS, watchOS, tvOS, visionOS apps using Swift and SwiftUI. ANY task touching `.swift` files, Xcode projects (`.xcodeproj`, `.xcworkspace`), SwiftData, Combine, and Apple platform APIs.                                                                                                                                      |
+| **Flutter Expert**                  | ALL Flutter cross-platform work: iOS, Android, web, and desktop apps with Dart. ANY task touching `.dart` files, `pubspec.yaml`, Flutter widget trees, Riverpod/Bloc state, GoRouter, platform channels, or Dart concurrency.                                                                                                                                       |
+| **Android Kotlin Expert**           | ALL native Android work: Kotlin, Jetpack Compose, MVVM/MVI architecture, Hilt DI, Room, Coroutines/Flow, Navigation Compose. ANY task touching Android Kotlin (`.kt`) source files, `build.gradle(.kts)`, AndroidManifest, or Android Jetpack libraries.                                                                                                            |
+| **Mobile UI/UX Expert**             | Mobile design reviews, accessibility audits, and platform-convention guidance. Use when the task is to EVALUATE or DESIGN a mobile UI — not implement it. Covers Apple HIG, Material Design 3, WCAG, responsive layouts, gesture patterns, and dark mode. Route to this agent BEFORE implementation when UI patterns need validation. Read-only — hands off to platform specialists for implementation. |
+| **App Store Deployment Expert**     | ALL mobile app store and CI/CD deployment work: App Store Connect, iTunes Connect, Google Play Console, code signing, certificates, provisioning profiles, Fastlane, EAS Build/Submit, Codemagic, GitHub Actions for mobile CI. ANY task involving TestFlight, Play Store tracks, app signing, release management, or OTA updates (EAS Update, CodePush, Shorebird).  |
 
 ## 7. Routing Rules
 
@@ -205,13 +214,14 @@ Using the wrong agent (or a generic one when a specialist exists) is a failure o
 
 2. Design phase → API Architect for API connectivity; optionally Code Reviewer for design review
 
-3. Implementation phase → Match to specialist:
-   - .NET/C# → C# Expert
+3. Bug diagnosis phase → See Section 15: Bug Diagnosis Protocol
+   DO NOT diagnose bugs yourself. Always delegate diagnosis to a subagent.
+
+4. Implementation phase → Match to specialist:
    - Vue components/composables/stores (.vue, frontend TS) → Expert Vue.js Frontend Engineer
    - Fastify routes/plugins/hooks (apps/backend/) → Fastify Expert
    - PocketBase collections/migrations/hooks → PocketBase Expert
    - Supabase schema/auth/functions → Supabase Expert
-   - Azure Functions → Azure Functions Expert
    - API clients/service layers → API Architect
    - PWA features (service workers, manifest, offline, push, workbox) → PWA Expert
    - Agent customization files (.agent.md, .instructions.md, .prompt.md, SKILL.md, copilot-instructions.md) → Custom Agent Foundry
@@ -219,11 +229,11 @@ Using the wrong agent (or a generic one when a specialist exists) is a failure o
    - Caddy configuration (Caddyfile, Caddyfile.*, reverse proxy, TLS, caching headers) → Caddy Expert
    - General backend/config/scripts → Software Engineer Agent (fallback)
 
-4. Review phase → Code Reviewer after any implementation
+5. Review phase → Code Reviewer after any implementation
 
-5. Testing phase → Test Writer for test generation
+6. Testing phase → Test Writer for test generation
 
-6. Validation phase → Same specialist as implementation, or Context7-Expert for library verification
+7. Validation phase → Same specialist as implementation, or Context7-Expert for library verification
 ```
 
 ### Routing Examples
@@ -286,23 +296,21 @@ Step 4 → Test Writer: "Generate tests for the push notification subscription f
 
 This matrix defines valid agent-to-agent handoff paths for multi-step workflows:
 
-| From → To              | Context7 | API Architect | Vue Expert | Fastify Expert | PocketBase Expert | Supabase Expert | Azure Functions Expert | C# Expert | Software Engineer | Code Reviewer | Test Writer | Agent Foundry | PWA Expert | Docker Expert | Caddy Expert |
-| ---------------------- | -------- | ------------- | ---------- | -------------- | ----------------- | --------------- | ---------------------- | --------- | ----------------- | ------------- | ----------- | ------------- | ---------- | ------------- | ------------ |
-| **Context7-Expert**    | —        | ✅            | ✅         | ✅             | ✅                | ✅              | ✅                     | ✅        | ✅                | ✅            | ✅          | ✅            | ✅         | ✅            | ✅           |
-| **API Architect**      | ✅       | —             | ✅         | ✅             | ✅                | ✅              | ✅                     | ✅        | ✅                | ✅            | ✅          | —             | ✅         | ✅            | ✅           |
-| **Vue Expert**         | ✅       | ✅            | —          | ✅             | ✅                | ✅              | —                      | —         | ✅                | ✅            | ✅          | —             | ✅         | —             | —            |
-| **Fastify Expert**     | ✅       | ✅            | ✅         | —              | ✅                | ✅              | ✅                     | —         | ✅                | ✅            | ✅          | —             | ✅         | ✅            | ✅           |
-| **PocketBase Expert**  | ✅       | ✅            | ✅         | ✅             | —                 | —               | —                      | —         | ✅                | ✅            | ✅          | —             | —          | —             | —            |
-| **Supabase Expert**    | ✅       | ✅            | ✅         | ✅             | —                 | —               | ✅                     | —         | ✅                | ✅            | ✅          | —             | —          | —             | —            |
-| **Azure Funcs Expert** | ✅       | ✅            | —          | ✅             | —                 | ✅              | —                      | ✅        | ✅                | ✅            | ✅          | —             | —          | ✅            | —            |
-| **C# Expert**          | ✅       | ✅            | —          | —              | —                 | —               | ✅                     | —         | ✅                | ✅            | ✅          | —             | —          | —             | —            |
-| **Software Engineer**  | ✅       | ✅            | ✅         | ✅             | ✅                | ✅              | ✅                     | ✅        | —                 | ✅            | ✅          | ✅            | ✅         | ✅            | ✅           |
-| **Code Reviewer**      | ✅       | —             | —          | —              | —                 | —               | —                      | —         | —                 | —             | ✅          | —             | —          | —             | —            |
-| **Test Writer**        | ✅       | —             | —          | —              | —                 | —               | —                      | —         | —                 | ✅            | —           | —             | —          | —             | —            |
-| **Agent Foundry**      | ✅       | —             | —          | —              | —                 | —               | —                      | —         | ✅                | —             | —           | —             | —          | —             | —            |
-| **PWA Expert**         | ✅       | —             | ✅         | ✅             | —                 | —               | —                      | —         | ✅                | ✅            | ✅          | —             | —          | —             | ✅           |
-| **Docker Expert**      | ✅       | —             | —          | ✅             | —                 | —               | ✅                     | —         | ✅                | ✅            | —           | —             | —          | —             | ✅           |
-| **Caddy Expert**       | ✅       | —             | —          | ✅             | —                 | —               | —                      | —         | ✅                | ✅            | —           | —             | ✅         | ✅            | —            |
+| From → To             | Context7 | API Architect | Vue Expert | Fastify Expert | PocketBase Expert | Supabase Expert | Software Engineer | Code Reviewer | Test Writer | Agent Foundry | PWA Expert | Docker Expert | Caddy Expert |
+| --------------------- | -------- | ------------- | ---------- | -------------- | ----------------- | --------------- | ----------------- | ------------- | ----------- | ------------- | ---------- | ------------- | ------------ |
+| **Context7-Expert**   | —        | ✅            | ✅         | ✅             | ✅                | ✅              | ✅                | ✅            | ✅          | ✅            | ✅         | ✅            | ✅           |
+| **API Architect**     | ✅       | —             | ✅         | ✅             | ✅                | ✅              | ✅                | ✅            | ✅          | —             | ✅         | ✅            | ✅           |
+| **Vue Expert**        | ✅       | ✅            | —          | ✅             | ✅                | ✅              | ✅                | ✅            | ✅          | —             | ✅         | —             | —            |
+| **Fastify Expert**    | ✅       | ✅            | ✅         | —              | ✅                | ✅              | ✅                | ✅            | ✅          | —             | ✅         | ✅            | ✅           |
+| **PocketBase Expert** | ✅       | ✅            | ✅         | ✅             | —                 | —               | ✅                | ✅            | ✅          | —             | —          | —             | —            |
+| **Supabase Expert**   | ✅       | ✅            | ✅         | ✅             | —                 | —               | ✅                | ✅            | ✅          | —             | —          | —             | —            |
+| **Software Engineer** | ✅       | ✅            | ✅         | ✅             | ✅                | ✅              | —                 | ✅            | ✅          | ✅            | ✅         | ✅            | ✅           |
+| **Code Reviewer**     | ✅       | —             | —          | —              | —                 | —               | —                 | —             | ✅          | —             | —          | —             | —            |
+| **Test Writer**       | ✅       | —             | —          | —              | —                 | —               | —                 | ✅            | —           | —             | —          | —             | —            |
+| **Agent Foundry**     | ✅       | —             | —          | —              | —                 | —               | ✅                | —             | —           | —             | —          | —             | —            |
+| **PWA Expert**        | ✅       | —             | ✅         | ✅             | —                 | —               | ✅                | ✅            | ✅          | —             | —          | —             | ✅           |
+| **Docker Expert**     | ✅       | —             | —          | ✅             | —                 | —               | ✅                | ✅            | —           | —             | —          | —             | ✅           |
+| **Caddy Expert**      | ✅       | —             | —          | ✅             | —                 | —               | ✅                | ✅            | —           | —             | ✅         | ✅            | —            |
 
 **Reading the matrix**: Row = source agent, Column = target agent. ✅ = valid handoff path.
 
@@ -530,6 +538,123 @@ YOUR TASK: Fix the issues identified in the validation report and complete the t
 
 [Rest of prompt as before, with additional constraints based on failure patterns]
 ```
+
+## 15. Bug Diagnosis Protocol
+
+When the user reports a **bug**, **error**, **unexpected behavior**, or asks you to **debug** or **investigate** an issue, follow this protocol. You MUST NOT diagnose bugs yourself — all investigation is delegated to subagents.
+
+### Step 1: Triage — Identify the Likely Stack Layer
+
+From the bug description, determine the affected layer:
+
+| Symptoms | Primary Diagnosis Agent |
+|----------|-------------------------|
+| UI broken, component not rendering, Vue reactivity issue, store state wrong | Expert Vue.js Frontend Engineer |
+| API returning wrong data, route error, validation failure, server crash | Fastify Expert |
+| Auth failure, JWT error, session issue, Supabase error | Supabase Expert |
+| Database query wrong, collection rule failing, PocketBase error | PocketBase Expert |
+| PWA not installing, service worker error, offline broken, push not arriving | PWA Expert |
+| Docker container crash, networking issue, container config problem | Docker Expert |
+| Reverse proxy error, TLS failure, wrong routing, CORS via Caddy | Caddy Expert |
+| Cross-cutting or unclear origin (spans frontend + backend, or no obvious layer) | API Architect |
+| Cannot be classified above | Software Engineer Agent |
+
+### Step 2: Launch a Stack-Specific Diagnosis Subagent (Tier 1)
+
+Delegate diagnosis to the matching specialist using this prompt template:
+
+```
+AGENT: [Stack-Specific Specialist]
+
+CONTEXT: The user has reported the following bug:
+"[VERBATIM BUG DESCRIPTION FROM USER]"
+
+ERROR OUTPUT / SYMPTOMS (if provided):
+[Paste any error messages, stack traces, or logs]
+
+YOUR TASK: Diagnose the root cause of this bug. Do NOT fix it yet — only identify the cause.
+
+INSTRUCTIONS:
+1. Read all relevant source files to understand the current implementation
+2. Trace the execution path related to the bug
+3. Identify the specific file(s), line(s), or function(s) causing the issue
+4. Explain WHY the bug occurs (not just where)
+5. Assess whether this is isolated to your domain or crosses into another layer
+
+REPORT BACK:
+- Root cause: [specific file, line/function, and explanation]
+- Affected scope: [isolated to this layer, or does it involve another layer?]
+- Cross-layer involvement: [describe if backend/frontend/config/infra is also implicated]
+- Proposed fix: [high-level description of what needs to change]
+- Confidence: HIGH / MEDIUM / LOW
+
+DO NOT implement the fix. Return diagnosis only.
+```
+
+### Step 3: Evaluate the Diagnosis Report
+
+After the Tier-1 specialist returns:
+
+- **Confidence HIGH + isolated to one layer** → Proceed directly to Step 4 (fix)
+- **Confidence MEDIUM or LOW** → Escalate to Step 3a
+- **Agent says "can't identify the issue"** → Escalate to Step 3a immediately
+- **Cross-layer involvement flagged** → Escalate to Step 3a
+
+#### Step 3a: Escalation — API Architect (or Software Engineer Agent)
+
+Launch a cross-layer diagnosis subagent when the Tier-1 agent couldn't identify the root cause:
+
+- Use **API Architect** when the issue spans the frontend↔backend boundary or involves API contracts
+- Use **Software Engineer Agent** for infrastructure, build, config, or tooling issues with no clear API involvement
+
+```
+AGENT: API Architect  [or Software Engineer Agent if non-API / infra]
+
+CONTEXT: The user reported a bug: "[VERBATIM BUG DESCRIPTION]"
+
+A [Stack-Specific Agent] was asked to diagnose it but could not identify the root cause
+(or flagged cross-layer involvement).
+
+Their Tier-1 diagnosis report was:
+[PASTE FULL DIAGNOSIS REPORT FROM STEP 2]
+
+YOUR TASK: Perform a cross-layer diagnosis.
+
+INSTRUCTIONS:
+1. Read the files implicated in the Tier-1 report AND neighboring layers
+2. Trace the full request/data flow end-to-end across all affected layers
+3. Identify the root cause — and which layer owns the bug
+4. Document why the Tier-1 agent missed it (different file? wrong layer assumption?)
+
+REPORT BACK:
+- Root cause: [specific file, line/function, explanation]
+- Owning layer: frontend / backend / database / infra / config
+- Why Tier-1 agent missed it: [explanation]
+- Proposed fix: [high-level description]
+- Which specialist should implement the fix: [Agent Name]
+
+DO NOT implement the fix. Return diagnosis only.
+```
+
+### Step 4: Route the Fix to the Owning Specialist
+
+Once root cause is confirmed (from Tier-1 OR escalated diagnosis), launch the appropriate specialist to implement the fix using the standard implementation subagent prompt (Section 9), including:
+- The full diagnosis report as context
+- The exact file(s) and line(s) to change
+- The proposed fix from the diagnosis
+- Acceptance criteria confirming the bug is resolved
+
+Then launch a **separate validation subagent** (same specialist) to verify the fix works and introduces no regressions.
+
+### Bug Diagnosis Anti-Patterns
+
+- ❌ **Never read files yourself to "quickly understand" the bug** — delegate to a diagnosis subagent
+- ❌ **Never guess the root cause** — even if the bug description seems obvious, diagnose before fixing
+- ❌ **Never skip escalation** — if Tier-1 returns low confidence, escalate immediately; do not retry Tier-1
+- ❌ **Never route the fix to the wrong specialist** — the owning layer from diagnosis determines the agent
+- ❌ **Never combine diagnosis + fix in one subagent call** — keep them as separate delegated tasks
+
+---
 
 ## 13. Common Failure Modes
 

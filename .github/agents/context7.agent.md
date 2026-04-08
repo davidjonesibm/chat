@@ -22,14 +22,6 @@ handoffs:
     agent: Software Engineer Agent
     prompt: Implement the solution using the best practices and documentation outlined above.
     send: false
-  - label: Implement with C#
-    agent: C# Expert
-    prompt: Implement the .NET solution using the best practices and documentation outlined above.
-    send: false
-  - label: Implement Azure Functions
-    agent: Azure Functions Expert
-    prompt: Implement the Azure Functions solution using the best practices and documentation outlined above.
-    send: false
 ---
 
 # Context7 Documentation Expert
