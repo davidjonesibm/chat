@@ -7,6 +7,7 @@
     "dev:backend": "pnpm --filter @chat/backend serve",
     "dev:supabase": "pnpm --filter @chat/backend db-start",
     "dev:supabase:stop": "pnpm --filter @chat/backend db-stop",
+    "types": "pnpm --filter @chat/backend db-types",
     "build:frontend": "pnpm --filter @chat/frontend build",
     "build:backend": "pnpm --filter @chat/backend build",
     "build": "pnpm -r --reporter=append-only run build",

@@ -7,7 +7,8 @@
     "build": "tsc --noEmit && esbuild src/main.ts --bundle --platform=node --outdir=../../dist/apps/backend --sourcemap --format=cjs",
     "lint": "eslint .",
     "db-start": "supabase start",
-    "db-stop": "supabase stop"
+    "db-stop": "supabase stop",
+    "db-types": "bash -c 'ref=${PROJECT_REF:-}; [ -z \"$ref\" ] && read -p \"Supabase project ref: \" ref; npx supabase gen types typescript --project-id \"$ref\" --schema public > database.types.ts' && cd ../../ &&pnpm format"
   },
   "dependencies": {
     "@chat/shared": "workspace:*",
@@ -24,6 +25,6 @@
     "@types/busboy": "^1.5.4",
     "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.1",
-    "supabase": "^2.83.0"
+    "supabase": "^2.84.2"
   }
 }

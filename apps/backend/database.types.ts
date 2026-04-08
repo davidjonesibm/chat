@@ -7,30 +7,10 @@ export type Json =
   | Json[];
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never;
-    };
-    Views: {
-      [_ in never]: never;
-    };
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json;
-          operationName?: string;
-          query?: string;
-          variables?: Json;
-        };
-        Returns: Json;
-      };
-    };
-    Enums: {
-      [_ in never]: never;
-    };
-    CompositeTypes: {
-      [_ in never]: never;
-    };
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: '14.5';
   };
   public: {
     Tables: {
@@ -65,6 +45,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: 'channels_group_id_fkey';
+            columns: ['group_id'];
+            isOneToOne: false;
+            referencedRelation: 'groups';
+            referencedColumns: ['id'];
+          },
+        ];
+      };
+      group_invites: {
+        Row: {
+          created_at: string;
+          created_by: string;
+          expires_at: string;
+          group_id: string;
+          id: string;
+          max_uses: number | null;
+          token: string;
+          updated_at: string;
+          use_count: number;
+        };
+        Insert: {
+          created_at?: string;
+          created_by: string;
+          expires_at: string;
+          group_id: string;
+          id?: string;
+          max_uses?: number | null;
+          token: string;
+          updated_at?: string;
+          use_count?: number;
+        };
+        Update: {
+          created_at?: string;
+          created_by?: string;
+          expires_at?: string;
+          group_id?: string;
+          id?: string;
+          max_uses?: number | null;
+          token?: string;
+          updated_at?: string;
+          use_count?: number;
+        };
+        Relationships: [
+          {
+            foreignKeyName: 'group_invites_group_id_fkey';
             columns: ['group_id'];
             isOneToOne: false;
             referencedRelation: 'groups';
@@ -122,74 +146,30 @@ export type Database = {
         };
         Relationships: [];
       };
-      group_invites: {
-        Row: {
-          id: string;
-          token: string;
-          group_id: string;
-          created_by: string;
-          expires_at: string;
-          max_uses: number | null;
-          use_count: number;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: {
-          id?: string;
-          token: string;
-          group_id: string;
-          created_by: string;
-          expires_at: string;
-          max_uses?: number | null;
-          use_count?: number;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Update: {
-          id?: string;
-          token?: string;
-          group_id?: string;
-          created_by?: string;
-          expires_at?: string;
-          max_uses?: number | null;
-          use_count?: number;
-          created_at?: string;
-          updated_at?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: 'group_invites_group_id_fkey';
-            columns: ['group_id'];
-            isOneToOne: false;
-            referencedRelation: 'groups';
-            referencedColumns: ['id'];
-          },
-        ];
-      };
       message_reactions: {
         Row: {
+          created_at: string;
+          emoji: string;
           id: string;
           message_id: string;
-          user_id: string;
-          emoji: string;
-          created_at: string;
           updated_at: string;
+          user_id: string;
         };
         Insert: {
+          created_at?: string;
+          emoji: string;
           id?: string;
           message_id: string;
-          user_id: string;
-          emoji: string;
-          created_at?: string;
           updated_at?: string;
+          user_id: string;
         };
         Update: {
+          created_at?: string;
+          emoji?: string;
           id?: string;
           message_id?: string;
-          user_id?: string;
-          emoji?: string;
-          created_at?: string;
           updated_at?: string;
+          user_id?: string;
         };
         Relationships: [
           {
@@ -197,13 +177,6 @@ export type Database = {
             columns: ['message_id'];
             isOneToOne: false;
             referencedRelation: 'messages';
-            referencedColumns: ['id'];
-          },
-          {
-            foreignKeyName: 'message_reactions_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: false;
-            referencedRelation: 'users';
             referencedColumns: ['id'];
           },
         ];
@@ -216,7 +189,9 @@ export type Database = {
           gif_url: string | null;
           id: string;
           image_url: string | null;
+          search_vector: unknown;
           sender_id: string | null;
+          seq: number;
           type: string;
           updated_at: string;
         };
@@ -227,7 +202,9 @@ export type Database = {
           gif_url?: string | null;
           id?: string;
           image_url?: string | null;
+          search_vector?: unknown;
           sender_id?: string | null;
+          seq?: never;
           type: string;
           updated_at?: string;
         };
@@ -238,7 +215,9 @@ export type Database = {
           gif_url?: string | null;
           id?: string;
           image_url?: string | null;
+          search_vector?: unknown;
           sender_id?: string | null;
+          seq?: never;
           type?: string;
           updated_at?: string;
         };
@@ -304,15 +283,7 @@ export type Database = {
           keys_p256dh?: string;
           user_id?: string;
         };
-        Relationships: [
-          {
-            foreignKeyName: 'push_subscriptions_user_id_fkey';
-            columns: ['user_id'];
-            isOneToOne: false;
-            referencedRelation: 'users';
-            referencedColumns: ['id'];
-          },
-        ];
+        Relationships: [];
       };
     };
     Views: {
@@ -451,9 +422,6 @@ export type CompositeTypes<
     : never;
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },
