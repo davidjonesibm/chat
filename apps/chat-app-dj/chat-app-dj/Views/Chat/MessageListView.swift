@@ -23,8 +23,10 @@ struct MessageListView: View {
 
     // MARK: - Callbacks
 
+    let emojiPickerMessageId: String?
     let onReact: (String, String) -> Void        // (messageId, emoji)
     let onLongPress: (MessageWithSender) -> Void
+    let onMediaTap: (URL) -> Void
 
     // MARK: - Local State
 
@@ -34,12 +36,17 @@ struct MessageListView: View {
     @State private var shouldAnimateScroll = false
     @State private var oldestMessageIdBeforeLoad: String?
     @State private var paginationCooldown = false
-    @State private var metadata: [MessageMetadata] = []
 
     // MARK: - Constants
 
     private static let groupingInterval: TimeInterval = 5 * 60  // 5 minutes
     private static let bottomAnchorId = "bottom-anchor"
+
+    /// Computed synchronously so metadata is available in the same render frame as messages,
+    /// ensuring `.defaultScrollAnchor(.bottom)` fires against a populated ScrollView.
+    private var metadata: [MessageMetadata] {
+        Self.computeMetadata(from: chatStore.messages)
+    }
 
     // MARK: - Metadata Computation
 
@@ -111,9 +118,6 @@ struct MessageListView: View {
                 unreadBanner
             }
         }
-        .onChange(of: chatStore.messages) { _, newMessages in
-            metadata = Self.computeMetadata(from: newMessages)
-        }
         .onChange(of: chatStore.messages.last?.id) { oldValue, newValue in
             handleNewMessage(oldLastId: oldValue, newLastId: newValue)
         }
@@ -164,8 +168,10 @@ struct MessageListView: View {
                         MessageRow(
                             message: item.message,
                             isNewSender: item.isNewSender,
+                            emojiPickerMessageId: emojiPickerMessageId,
                             onReact: onReact,
-                            onLongPress: onLongPress
+                            onLongPress: onLongPress,
+                            onMediaTap: onMediaTap
                         )
                     }
                     .id(item.message.id)
@@ -245,8 +251,13 @@ struct MessageListView: View {
     private func handleNewMessage(oldLastId: String?, newLastId: String?) {
         guard let newLastId, newLastId != oldLastId else { return }
 
-        // Initial load — .defaultScrollAnchor(.bottom) handles positioning
-        guard oldLastId != nil else { return }
+        // Initial load — also explicitly scroll to bottom as a belt-and-suspenders
+        // approach alongside .defaultScrollAnchor(.bottom)
+        guard oldLastId != nil else {
+            shouldAnimateScroll = false
+            scrollTarget = Self.bottomAnchorId
+            return
+        }
 
         if isNearBottom {
             // Auto-scroll to the new message
@@ -339,8 +350,10 @@ private extension View {
 
 #Preview {
     MessageListView(
+        emojiPickerMessageId: nil,
         onReact: { _, _ in },
-        onLongPress: { _ in }
+        onLongPress: { _ in },
+        onMediaTap: { _ in }
     )
     .environment(ChatStore())
 }

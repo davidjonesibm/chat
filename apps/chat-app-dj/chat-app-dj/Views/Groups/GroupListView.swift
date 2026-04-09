@@ -69,20 +69,11 @@ struct GroupListView: View {
         Button {
             // Profile action — future implementation
         } label: {
-            if let avatar = authStore.user?.avatar, let url = URL(string: avatar) {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    Image(systemName: "person.circle")
-                }
-                .frame(width: 28, height: 28)
-                .clipShape(Circle())
-            } else {
-                Image(systemName: "person.circle")
-                    .imageScale(.large)
-            }
+            UserAvatarView(
+                username: authStore.user?.username ?? "",
+                avatarUrl: authStore.user?.avatar,
+                size: 28
+            )
         }
     }
 }

@@ -8,8 +8,10 @@ import GiphyUISDK
 struct MessageRow: View {
     let message: MessageWithSender
     let isNewSender: Bool
+    let emojiPickerMessageId: String?
     let onReact: (String, String) -> Void   // (messageId, emoji)
     let onLongPress: (MessageWithSender) -> Void
+    let onMediaTap: (URL) -> Void
 
     @Environment(AuthStore.self) private var authStore
 
@@ -67,6 +69,9 @@ struct MessageRow: View {
         }, perform: {
             onLongPress(message)
         })
+        .anchorPreference(key: EmojiPickerAnchorKey.self, value: .bounds) { anchor in
+            emojiPickerMessageId == message.id ? anchor : nil
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityDescription)
     }
@@ -123,7 +128,7 @@ struct MessageRow: View {
     // MARK: - Giphy Content
 
     private var giphyContent: some View {
-        GiphyContentView(gifUrl: message.gifUrl, content: message.content)
+        GiphyContentView(gifUrl: message.gifUrl, content: message.content, onMediaTap: onMediaTap)
     }
 
     /// Extracts the GIPHY media ID from URLs like
@@ -141,7 +146,7 @@ struct MessageRow: View {
     // MARK: - Image Content
 
     private var imageContent: some View {
-        ImageContentView(imageUrl: message.imageUrl, content: message.content)
+        ImageContentView(imageUrl: message.imageUrl, content: message.content, onMediaTap: onMediaTap)
     }
 
     // MARK: - Reactions Row
@@ -251,6 +256,7 @@ private struct MessageReactionsRow: View {
 private struct GiphyContentView: View {
     let gifUrl: String?
     let content: String
+    let onMediaTap: (URL) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -259,6 +265,12 @@ private struct GiphyContentView: View {
                 GiphyAnimatedView(mediaId: mediaId)
                     .frame(width: 250, height: 180)
                     .clipShape(.rect(cornerRadius: 8))
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if let url = URL(string: gifUrl) {
+                            onMediaTap(url)
+                        }
+                    }
             } else if let gifUrl, let url = URL(string: gifUrl) {
                 // Fallback for non-standard GIPHY URLs
                 AsyncImage(url: url) { phase in
@@ -280,6 +292,10 @@ private struct GiphyContentView: View {
                 }
                 .frame(width: 250, height: 180)
                 .clipShape(.rect(cornerRadius: 8))
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onMediaTap(url)
+                }
             }
 
             if !content.isEmpty {
@@ -308,6 +324,7 @@ private struct GiphyContentView: View {
 private struct ImageContentView: View {
     let imageUrl: String?
     let content: String
+    let onMediaTap: (URL) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -331,6 +348,10 @@ private struct ImageContentView: View {
                 }
                 .frame(width: 250, height: 180)
                 .clipShape(.rect(cornerRadius: 8))
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    onMediaTap(url)
+                }
             }
 
             if !content.isEmpty {
@@ -523,8 +544,10 @@ struct FlowLayout: Layout {
             ]
         ),
         isNewSender: true,
+        emojiPickerMessageId: nil,
         onReact: { _, _ in },
-        onLongPress: { _ in }
+        onLongPress: { _ in },
+        onMediaTap: { _ in }
     )
     .environment(AuthStore())
 }
@@ -545,8 +568,10 @@ struct FlowLayout: Layout {
             reactions: nil
         ),
         isNewSender: false,
+        emojiPickerMessageId: nil,
         onReact: { _, _ in },
-        onLongPress: { _ in }
+        onLongPress: { _ in },
+        onMediaTap: { _ in }
     )
     .environment(AuthStore())
 }
@@ -567,8 +592,10 @@ struct FlowLayout: Layout {
             reactions: nil
         ),
         isNewSender: true,
+        emojiPickerMessageId: nil,
         onReact: { _, _ in },
-        onLongPress: { _ in }
+        onLongPress: { _ in },
+        onMediaTap: { _ in }
     )
     .environment(AuthStore())
 }

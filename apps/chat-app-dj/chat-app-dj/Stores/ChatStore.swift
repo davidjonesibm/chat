@@ -38,12 +38,23 @@ final class ChatStore {
 
         logger.info("Entering channel \(channelId)")
 
+        // Run WS connect+join and message fetch concurrently.
+        // Messages come from HTTP; live updates come from WS — they're independent.
+        async let wsReady: Void = connectAndJoinWebSocket(channelId: channelId, token: token)
+        async let messagesFetched: Void = fetchMessages()
+
+        // Await messages first so loading clears as soon as they arrive
+        await messagesFetched
+        await wsReady
+    }
+
+    /// Connects the WebSocket, sends channel:join, and starts listening for live messages.
+    private func connectAndJoinWebSocket(channelId: String, token: String) async {
         do {
             try await webSocketService.connect(token: token)
         } catch {
             logger.error("Failed to connect — \(error.localizedDescription)")
             self.error = "Failed to connect to chat."
-            loading = false
             return
         }
 
@@ -54,7 +65,6 @@ final class ChatStore {
         }
 
         listenForMessages()
-        await fetchMessages()
     }
 
     func leaveChannel() async {
