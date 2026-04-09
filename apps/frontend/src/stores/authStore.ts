@@ -134,7 +134,9 @@ export const useAuthStore = defineStore('auth', () => {
 
       // Set up auth state change listener for automatic token refresh
       authSubscription?.unsubscribe();
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event, session) => {
         if (session && session.user) {
           token.value = session.access_token;
           user.value = mapSupabaseUser(session.user);

@@ -1,3 +1,4 @@
+import type { FastifyBaseLogger } from 'fastify';
 import type { WebSocket } from 'ws';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '../../../database.types';
@@ -18,24 +19,6 @@ export type PushSender = (
   userId: string,
   payload: PushNotificationPayload,
 ) => Promise<void>;
-
-// Track WebSocket connections per channel (room tracking)
-const channelRooms = new Map<string, Set<WebSocket>>();
-
-// Track user data per WebSocket
-const socketUsers = new Map<WebSocket, WsUser>();
-
-// Track which channels a WebSocket is in
-const socketChannels = new Map<WebSocket, Set<string>>();
-
-// Track typing users per channel: channelId -> Set<username>
-const typingUsers = new Map<string, Set<string>>();
-
-// Track typing timeouts per user per channel: `${channelId}:${username}` -> timeout
-const typingTimeouts = new Map<string, NodeJS.Timeout>();
-
-// Track online users per channel: channelId -> Set<userId>
-const onlineUsers = new Map<string, Set<string>>();
 
 // --- M3: WS Message Validation ---
 
@@ -89,66 +72,234 @@ class TokenBucket {
   }
 }
 
-const socketBuckets = new Map<WebSocket, TokenBucket>();
+// --- ConnectionManager: encapsulates all WebSocket connection state ---
 
-/**
- * Get all currently online user IDs across all channels
- */
-export function getOnlineUserIds(): Set<string> {
-  const ids = new Set<string>();
-  for (const user of socketUsers.values()) {
-    ids.add(user.id);
+export class ConnectionManager {
+  // Maps channel IDs to connected sockets
+  private readonly channelRooms = new Map<string, Set<WebSocket>>();
+  // Maps sockets to authenticated users
+  private readonly socketUsers = new Map<WebSocket, WsUser>();
+  // Maps sockets to channels they've joined
+  private readonly socketChannels = new Map<WebSocket, Set<string>>();
+  // Maps channel IDs to typing user names
+  private readonly typingUsers = new Map<string, Set<string>>();
+  // Typing indicator timeout handles: `${channelId}:${username}` -> timeout
+  private readonly typingTimeouts = new Map<string, NodeJS.Timeout>();
+  // Maps channel IDs to online user IDs
+  private readonly onlineUsers = new Map<string, Set<string>>();
+  // Rate limiting buckets per socket
+  private readonly socketBuckets = new Map<WebSocket, TokenBucket>();
+
+  constructor(private readonly logger: FastifyBaseLogger) {}
+
+  /** Get all currently connected WebSocket instances */
+  getConnectedSockets(): WebSocket[] {
+    return Array.from(this.socketUsers.keys());
   }
-  return ids;
-}
 
-/**
- * Broadcast a message to all WebSockets in a room
- */
-function broadcastToRoom(
-  channelId: string,
-  message: ServerMessage,
-  excludeSocket?: WebSocket,
-): void {
-  const room = channelRooms.get(channelId);
-  if (!room) return;
+  /** Get all currently online user IDs across all channels */
+  getOnlineUserIds(): Set<string> {
+    const ids = new Set<string>();
+    for (const user of this.socketUsers.values()) {
+      ids.add(user.id);
+    }
+    return ids;
+  }
 
-  const payload = JSON.stringify(message);
-  for (const ws of room) {
-    if (ws !== excludeSocket && ws.readyState === 1) {
-      // 1 = OPEN
-      ws.send(payload);
+  /** Broadcast a message to all WebSockets in a room */
+  broadcastToRoom(
+    channelId: string,
+    message: ServerMessage,
+    excludeSocket?: WebSocket,
+  ): void {
+    const room = this.channelRooms.get(channelId);
+    if (!room) return;
+
+    const payload = JSON.stringify(message);
+    for (const ws of room) {
+      if (ws !== excludeSocket && ws.readyState === 1) {
+        // 1 = OPEN
+        ws.send(payload);
+      }
+    }
+  }
+
+  /** Add a WebSocket to a channel room */
+  joinRoom(ws: WebSocket, channelId: string): void {
+    let room = this.channelRooms.get(channelId);
+    if (!room) {
+      room = new Set();
+      this.channelRooms.set(channelId, room);
+    }
+    room.add(ws);
+
+    // Track channel membership for this socket
+    let channels = this.socketChannels.get(ws);
+    if (!channels) {
+      channels = new Set();
+      this.socketChannels.set(ws, channels);
+    }
+    channels.add(channelId);
+  }
+
+  /** Remove a WebSocket from a channel room */
+  leaveRoom(ws: WebSocket, channelId: string): void {
+    this.channelRooms.get(channelId)?.delete(ws);
+    this.socketChannels.get(ws)?.delete(channelId);
+  }
+
+  /** Register a new socket connection */
+  registerSocket(ws: WebSocket, user: WsUser): void {
+    this.socketUsers.set(ws, user);
+    this.socketChannels.set(ws, new Set());
+    this.socketBuckets.set(ws, new TokenBucket());
+  }
+
+  /** Check rate limit for a socket. Returns true if allowed, false if rate limited. */
+  checkRateLimit(ws: WebSocket): boolean {
+    const bucket = this.socketBuckets.get(ws);
+    if (bucket && !bucket.consume()) return false;
+    return true;
+  }
+
+  /** Get typing users set for a channel, creating if needed */
+  getOrCreateTypingUsers(channelId: string): Set<string> {
+    let typing = this.typingUsers.get(channelId);
+    if (!typing) {
+      typing = new Set();
+      this.typingUsers.set(channelId, typing);
+    }
+    return typing;
+  }
+
+  /** Get typing users set for a channel (may be undefined) */
+  getTypingUsers(channelId: string): Set<string> | undefined {
+    return this.typingUsers.get(channelId);
+  }
+
+  /** Clear a typing timeout and optionally delete the key */
+  clearTypingTimeout(timeoutKey: string): void {
+    const existing = this.typingTimeouts.get(timeoutKey);
+    if (existing) {
+      clearTimeout(existing);
+      this.typingTimeouts.delete(timeoutKey);
+    }
+  }
+
+  /** Set a typing timeout */
+  setTypingTimeout(timeoutKey: string, timeout: NodeJS.Timeout): void {
+    this.typingTimeouts.set(timeoutKey, timeout);
+  }
+
+  /** Get or create online users set for a channel */
+  getOrCreateOnlineUsers(channelId: string): Set<string> {
+    let online = this.onlineUsers.get(channelId);
+    if (!online) {
+      online = new Set();
+      this.onlineUsers.set(channelId, online);
+    }
+    return online;
+  }
+
+  /** Get online users set for a channel (may be undefined) */
+  getOnlineUsers(channelId: string): Set<string> | undefined {
+    return this.onlineUsers.get(channelId);
+  }
+
+  /** Clean up an empty online users set */
+  cleanupOnlineUsers(channelId: string): void {
+    const online = this.onlineUsers.get(channelId);
+    if (online && online.size === 0) {
+      this.onlineUsers.delete(channelId);
+    }
+  }
+
+  /** Handle WebSocket disconnection — clean up all state for this socket */
+  handleDisconnect(ws: WebSocket, user: WsUser): void {
+    try {
+      this.logger.info(
+        { userId: user.id, username: user.username },
+        'WebSocket user disconnected',
+      );
+
+      // Get all channels this socket was in
+      const channels = this.socketChannels.get(ws);
+      if (channels) {
+        // Remove user from typing and online tracking for each channel
+        channels.forEach((channelId) => {
+          // Remove socket from channel room
+          this.channelRooms.get(channelId)?.delete(ws);
+          if (this.channelRooms.get(channelId)?.size === 0) {
+            this.channelRooms.delete(channelId);
+          }
+
+          // Remove from typing
+          const typing = this.typingUsers.get(channelId);
+          if (typing) {
+            typing.delete(user.username);
+
+            // Clear typing timeout
+            const timeoutKey = `${channelId}:${user.username}`;
+            const timeout = this.typingTimeouts.get(timeoutKey);
+            if (timeout) {
+              clearTimeout(timeout);
+              this.typingTimeouts.delete(timeoutKey);
+            }
+
+            // Emit updated typing state
+            const typingMessage: ServerMessage = {
+              type: 'typing:update',
+              payload: {
+                channelId,
+                users: Array.from(typing),
+              },
+            };
+            this.broadcastToRoom(channelId, typingMessage);
+
+            // Clean up empty typing sets
+            if (typing.size === 0) {
+              this.typingUsers.delete(channelId);
+            }
+          }
+
+          // Remove from online users
+          const online = this.onlineUsers.get(channelId);
+          if (online) {
+            online.delete(user.id);
+
+            // Emit updated presence
+            const presenceMessage: ServerMessage = {
+              type: 'presence:update',
+              payload: {
+                channelId,
+                users: Array.from(online),
+              },
+            };
+            this.broadcastToRoom(channelId, presenceMessage);
+
+            // Clean up empty online sets
+            if (online.size === 0) {
+              this.onlineUsers.delete(channelId);
+            }
+          }
+        });
+
+        // Clean up socket channels tracking
+        this.socketChannels.delete(ws);
+      }
+    } catch (err) {
+      this.logger.error({ err }, 'Error in disconnect handler');
+    } finally {
+      // Clean up user tracking
+      this.socketUsers.delete(ws);
+      this.socketChannels.delete(ws);
+      this.socketBuckets.delete(ws);
     }
   }
 }
 
-/**
- * Add a WebSocket to a channel room
- */
-function joinRoom(ws: WebSocket, channelId: string): void {
-  let room = channelRooms.get(channelId);
-  if (!room) {
-    room = new Set();
-    channelRooms.set(channelId, room);
-  }
-  room.add(ws);
-
-  // Track channel membership for this socket
-  let channels = socketChannels.get(ws);
-  if (!channels) {
-    channels = new Set();
-    socketChannels.set(ws, channels);
-  }
-  channels.add(channelId);
-}
-
-/**
- * Remove a WebSocket from a channel room
- */
-function leaveRoom(ws: WebSocket, channelId: string): void {
-  channelRooms.get(channelId)?.delete(ws);
-  socketChannels.get(ws)?.delete(channelId);
-}
+// Module-level singleton — initialized lazily on first WebSocket connection
+let connectionManager: ConnectionManager | undefined;
 
 // --- C1/C2: Channel membership verification helper ---
 
@@ -201,12 +352,13 @@ async function handleMessage(
   data: string,
   user: WsUser,
   supabase: SupabaseClient<Database>,
+  logger: FastifyBaseLogger,
   pushSender?: PushSender,
 ): Promise<void> {
+  const mgr = getManager();
   try {
     // M4: Rate limiting
-    const bucket = socketBuckets.get(ws);
-    if (bucket && !bucket.consume()) {
+    if (!mgr.checkRateLimit(ws)) {
       ws.send(
         JSON.stringify({
           type: 'error',
@@ -258,36 +410,48 @@ async function handleMessage(
           clientMessage.payload,
           user,
           supabase,
+          logger,
           pushSender,
         );
         break;
 
       case 'typing:start':
-        handleTypingStart(ws, clientMessage.payload, user);
+        handleTypingStart(ws, clientMessage.payload, user, logger);
         break;
 
       case 'typing:stop':
-        handleTypingStop(ws, clientMessage.payload, user);
+        handleTypingStop(ws, clientMessage.payload, user, logger);
         break;
 
       case 'channel:join':
-        await handleChannelJoin(ws, clientMessage.payload, user, supabase);
+        await handleChannelJoin(
+          ws,
+          clientMessage.payload,
+          user,
+          supabase,
+          logger,
+        );
         break;
 
       case 'channel:leave':
-        handleChannelLeave(ws, clientMessage.payload, user);
+        handleChannelLeave(ws, clientMessage.payload, user, logger);
         break;
 
       case 'reaction:toggle': {
-        await handleReactionToggle(supabase, clientMessage.payload, user.id);
+        await handleReactionToggle(
+          supabase,
+          clientMessage.payload,
+          user.id,
+          logger,
+        );
         break;
       }
 
       default:
-        console.error('Unknown message type:', clientMessage);
+        logger.error({ msg: clientMessage }, 'Unknown message type');
     }
   } catch (err) {
-    console.error('Error handling message:', err);
+    logger.error({ err }, 'Error handling message');
   }
 }
 
@@ -299,6 +463,7 @@ async function handleMessageSend(
   payload: MessageSendPayload,
   user: WsUser,
   supabase: SupabaseClient<Database>,
+  logger: FastifyBaseLogger,
   pushSender?: PushSender,
 ): Promise<void> {
   try {
@@ -320,7 +485,7 @@ async function handleMessageSend(
 
     // Validate payload
     if (!channelId || typeof channelId !== 'string') {
-      console.error('[message:send] Invalid channelId');
+      logger.error('Invalid channelId in message:send');
       return;
     }
 
@@ -346,11 +511,11 @@ async function handleMessageSend(
     if (messageType === 'giphy') {
       // Giphy messages require a valid gif_url from giphy.com
       if (!gif_url || typeof gif_url !== 'string') {
-        console.error('[message:send] Giphy message missing gif_url');
+        logger.error('Giphy message missing gif_url');
         return;
       }
       if (!gif_url.startsWith('https://')) {
-        console.error('[message:send] gif_url must start with https://');
+        logger.error('gif_url must start with https://');
         return;
       }
       try {
@@ -359,7 +524,7 @@ async function handleMessageSend(
           parsedUrl.hostname !== 'giphy.com' &&
           !parsedUrl.hostname.endsWith('.giphy.com')
         ) {
-          console.error('[message:send] gif_url must be from giphy.com domain');
+          logger.error('gif_url must be from giphy.com domain');
           ws.send(
             JSON.stringify({
               type: 'error',
@@ -369,7 +534,7 @@ async function handleMessageSend(
           return;
         }
       } catch {
-        console.error('[message:send] gif_url is not a valid URL');
+        logger.error('gif_url is not a valid URL');
         ws.send(
           JSON.stringify({
             type: 'error',
@@ -380,18 +545,16 @@ async function handleMessageSend(
       }
     } else if (messageType === 'image') {
       if (!image_url || typeof image_url !== 'string') {
-        console.error('[message:send] Image message missing image_url');
+        logger.error('Image message missing image_url');
         return;
       }
       if (!image_url.startsWith('https://')) {
-        console.error('[message:send] image_url must start with https://');
+        logger.error('image_url must start with https://');
         return;
       }
       const allowedPrefix = `${process.env.SUPABASE_URL}/storage/v1/object/public/chat-images/`;
       if (!image_url.startsWith(allowedPrefix)) {
-        console.error(
-          '[message:send] image_url must be from Supabase chat-images bucket',
-        );
+        logger.error('image_url must be from Supabase chat-images bucket');
         ws.send(
           JSON.stringify({
             type: 'error',
@@ -411,7 +574,7 @@ async function handleMessageSend(
         typeof content !== 'string' ||
         content.trim().length === 0
       ) {
-        console.error('[message:send] Invalid content');
+        logger.error('Invalid content in message:send');
         return;
       }
     }
@@ -433,7 +596,7 @@ async function handleMessageSend(
       .single();
 
     if (error) {
-      console.error('[message:send] Database error:', error);
+      logger.error({ err: error, channelId }, 'Database error in message:send');
       return;
     }
 
@@ -475,10 +638,11 @@ async function handleMessageSend(
         },
       },
     };
-    broadcastToRoom(channelId, serverMessage);
+    getManager().broadcastToRoom(channelId, serverMessage);
 
-    console.log(
-      `[message:send] Message sent to channel:${channelId} by ${user.username}`,
+    logger.info(
+      { channelId, username: user.username },
+      'Message sent to channel',
     );
 
     // Send push notifications to offline users (fire and forget)
@@ -491,12 +655,16 @@ async function handleMessageSend(
         senderData.username,
         supabase,
         pushSender,
+        logger,
       ).catch((err) => {
-        console.error('[message:send] Push notification error:', err);
+        logger.error(
+          { err, channelId },
+          'Push notification error in message:send',
+        );
       });
     }
   } catch (err) {
-    console.error('[message:send] Error:', err);
+    logger.error({ err }, 'Error in message:send');
   }
 }
 
@@ -511,6 +679,7 @@ async function sendPushToOfflineUsers(
   senderUsername: string,
   supabase: SupabaseClient<Database>,
   pushSender: PushSender,
+  logger: FastifyBaseLogger,
 ): Promise<void> {
   try {
     // Get the channel's group_id
@@ -521,7 +690,10 @@ async function sendPushToOfflineUsers(
       .single();
 
     if (channelError || !channel) {
-      console.error('[push] Failed to fetch channel:', channelError);
+      logger.error(
+        { err: channelError, channelId },
+        'Failed to fetch channel for push',
+      );
       return;
     }
 
@@ -532,12 +704,15 @@ async function sendPushToOfflineUsers(
       .eq('group_id', channel.group_id);
 
     if (membersError || !members) {
-      console.error('[push] Failed to fetch group members:', membersError);
+      logger.error(
+        { err: membersError, groupId: channel.group_id },
+        'Failed to fetch group members for push',
+      );
       return;
     }
 
     // Get currently online user IDs
-    const onlineUserIds = getOnlineUserIds();
+    const onlineUserIds = getManager().getOnlineUserIds();
 
     // Filter to offline users (not online, not the sender)
     const offlineUserIds = members
@@ -545,7 +720,7 @@ async function sendPushToOfflineUsers(
       .filter((userId) => userId !== sender.id && !onlineUserIds.has(userId));
 
     if (offlineUserIds.length === 0) {
-      console.log('[push] No offline users to notify');
+      logger.debug({ channelId }, 'No offline users to notify');
       return;
     }
 
@@ -567,7 +742,6 @@ async function sendPushToOfflineUsers(
     }
 
     // Send push to each offline user
-    let successCount = 0;
     const pushPromises = offlineUserIds.map(async (userId) => {
       const payload: PushNotificationPayload = {
         title: `${senderUsername} in ${channel.name}`,
@@ -577,20 +751,17 @@ async function sendPushToOfflineUsers(
         senderUsername,
       };
 
-      try {
-        await pushSender(userId, payload);
-        successCount++;
-      } catch (err) {
-        console.error(`[push] Failed to send to user ${userId}:`, err);
-      }
+      await pushSender(userId, payload);
     });
 
-    await Promise.all(pushPromises);
-    console.log(
-      `[push] Attempted ${offlineUserIds.length} push(es), ${successCount} delivered successfully`,
+    const results = await Promise.allSettled(pushPromises);
+    const successCount = results.filter((r) => r.status === 'fulfilled').length;
+    logger.info(
+      { channelId, attempted: offlineUserIds.length, delivered: successCount },
+      'Push notifications sent',
     );
   } catch (err) {
-    console.error('[push] Error sending push notifications:', err);
+    logger.error({ err, channelId }, 'Error sending push notifications');
   }
 }
 
@@ -601,34 +772,30 @@ function handleTypingStart(
   ws: WebSocket,
   payload: TypingPayload,
   user: WsUser,
+  logger: FastifyBaseLogger,
 ): void {
   try {
     const { channelId } = payload;
 
     if (!channelId || typeof channelId !== 'string') {
-      console.error('[typing:start] Invalid channelId');
+      logger.error('Invalid channelId in typing:start');
       return;
     }
 
+    const mgr = getManager();
+
     // Get or create typing users set for this channel
-    let typing = typingUsers.get(channelId);
-    if (!typing) {
-      typing = new Set();
-      typingUsers.set(channelId, typing);
-    }
+    const typing = mgr.getOrCreateTypingUsers(channelId);
     typing.add(user.username);
 
     // Clear any existing timeout for this user in this channel
     const timeoutKey = `${channelId}:${user.username}`;
-    const existingTimeout = typingTimeouts.get(timeoutKey);
-    if (existingTimeout) {
-      clearTimeout(existingTimeout);
-    }
+    mgr.clearTypingTimeout(timeoutKey);
 
     // Set auto-clear timeout (5 seconds)
     const timeout = setTimeout(() => {
       typing.delete(user.username);
-      typingTimeouts.delete(timeoutKey);
+      mgr.clearTypingTimeout(timeoutKey);
 
       // Emit updated typing state (exclude sender)
       const serverMessage: ServerMessage = {
@@ -638,10 +805,10 @@ function handleTypingStart(
           users: Array.from(typing),
         },
       };
-      broadcastToRoom(channelId, serverMessage, ws);
+      mgr.broadcastToRoom(channelId, serverMessage, ws);
     }, 5000);
 
-    typingTimeouts.set(timeoutKey, timeout);
+    mgr.setTypingTimeout(timeoutKey, timeout);
 
     // Emit to others in the channel (exclude sender)
     const serverMessage: ServerMessage = {
@@ -651,13 +818,11 @@ function handleTypingStart(
         users: Array.from(typing),
       },
     };
-    broadcastToRoom(channelId, serverMessage, ws);
+    mgr.broadcastToRoom(channelId, serverMessage, ws);
 
-    console.log(
-      `[typing:start] ${user.username} typing in channel:${channelId}`,
-    );
+    logger.debug({ username: user.username, channelId }, 'User started typing');
   } catch (err) {
-    console.error('[typing:start] Error:', err);
+    logger.error({ err }, 'Error in typing:start');
   }
 }
 
@@ -668,26 +833,24 @@ function handleTypingStop(
   ws: WebSocket,
   payload: TypingPayload,
   user: WsUser,
+  logger: FastifyBaseLogger,
 ): void {
   try {
     const { channelId } = payload;
 
     if (!channelId || typeof channelId !== 'string') {
-      console.error('[typing:stop] Invalid channelId');
+      logger.error('Invalid channelId in typing:stop');
       return;
     }
 
-    const typing = typingUsers.get(channelId);
+    const mgr = getManager();
+    const typing = mgr.getTypingUsers(channelId);
     if (typing) {
       typing.delete(user.username);
 
       // Clear timeout
       const timeoutKey = `${channelId}:${user.username}`;
-      const existingTimeout = typingTimeouts.get(timeoutKey);
-      if (existingTimeout) {
-        clearTimeout(existingTimeout);
-        typingTimeouts.delete(timeoutKey);
-      }
+      mgr.clearTypingTimeout(timeoutKey);
 
       // Emit to others in the channel (exclude sender)
       const serverMessage: ServerMessage = {
@@ -697,14 +860,15 @@ function handleTypingStop(
           users: Array.from(typing),
         },
       };
-      broadcastToRoom(channelId, serverMessage, ws);
+      mgr.broadcastToRoom(channelId, serverMessage, ws);
 
-      console.log(
-        `[typing:stop] ${user.username} stopped typing in channel:${channelId}`,
+      logger.debug(
+        { username: user.username, channelId },
+        'User stopped typing',
       );
     }
   } catch (err) {
-    console.error('[typing:stop] Error:', err);
+    logger.error({ err }, 'Error in typing:stop');
   }
 }
 
@@ -716,12 +880,13 @@ async function handleChannelJoin(
   payload: ChannelPayload,
   user: WsUser,
   supabase: SupabaseClient<Database>,
+  logger: FastifyBaseLogger,
 ): Promise<void> {
   try {
     const { channelId } = payload;
 
     if (!channelId || typeof channelId !== 'string') {
-      console.error('[channel:join] Invalid channelId');
+      logger.error('Invalid channelId in channel:join');
       return;
     }
 
@@ -744,15 +909,13 @@ async function handleChannelJoin(
       return;
     }
 
+    const mgr = getManager();
+
     // Join the room
-    joinRoom(ws, channelId);
+    mgr.joinRoom(ws, channelId);
 
     // Add user to online users for this channel
-    let online = onlineUsers.get(channelId);
-    if (!online) {
-      online = new Set();
-      onlineUsers.set(channelId, online);
-    }
+    const online = mgr.getOrCreateOnlineUsers(channelId);
     online.add(user.id);
 
     // Emit presence update to all users in the channel
@@ -763,13 +926,14 @@ async function handleChannelJoin(
         users: Array.from(online),
       },
     };
-    broadcastToRoom(channelId, presenceMessage);
+    mgr.broadcastToRoom(channelId, presenceMessage);
 
-    console.log(
-      `[channel:join] ${user.username} joined channel:${channelId}, online: ${online.size}`,
+    logger.info(
+      { username: user.username, channelId, onlineCount: online.size },
+      'User joined channel',
     );
   } catch (err) {
-    console.error('[channel:join] Error:', err);
+    logger.error({ err }, 'Error in channel:join');
   }
 }
 
@@ -780,20 +944,23 @@ function handleChannelLeave(
   ws: WebSocket,
   payload: ChannelPayload,
   user: WsUser,
+  logger: FastifyBaseLogger,
 ): void {
   try {
     const { channelId } = payload;
 
     if (!channelId || typeof channelId !== 'string') {
-      console.error('[channel:leave] Invalid channelId');
+      logger.error('Invalid channelId in channel:leave');
       return;
     }
 
+    const mgr = getManager();
+
     // Leave the room
-    leaveRoom(ws, channelId);
+    mgr.leaveRoom(ws, channelId);
 
     // Remove user from online users for this channel
-    const online = onlineUsers.get(channelId);
+    const online = mgr.getOnlineUsers(channelId);
     if (online) {
       online.delete(user.id);
 
@@ -805,17 +972,15 @@ function handleChannelLeave(
           users: Array.from(online),
         },
       };
-      broadcastToRoom(channelId, presenceMessage);
+      mgr.broadcastToRoom(channelId, presenceMessage);
 
       // Clean up empty sets
-      if (online.size === 0) {
-        onlineUsers.delete(channelId);
-      }
+      mgr.cleanupOnlineUsers(channelId);
     }
 
-    console.log(`[channel:leave] ${user.username} left channel:${channelId}`);
+    logger.info({ username: user.username, channelId }, 'User left channel');
   } catch (err) {
-    console.error('[channel:leave] Error:', err);
+    logger.error({ err }, 'Error in channel:leave');
   }
 }
 
@@ -826,17 +991,18 @@ async function handleReactionToggle(
   supabase: SupabaseClient<Database>,
   payload: ReactionTogglePayload,
   userId: string,
+  logger: FastifyBaseLogger,
 ): Promise<void> {
   try {
     const { messageId, emoji } = payload;
 
     if (!messageId || typeof messageId !== 'string') {
-      console.error('[reaction:toggle] Invalid messageId');
+      logger.error('Invalid messageId in reaction:toggle');
       return;
     }
 
     if (!emoji || typeof emoji !== 'string') {
-      console.error('[reaction:toggle] Invalid emoji');
+      logger.error('Invalid emoji in reaction:toggle');
       return;
     }
 
@@ -847,7 +1013,7 @@ async function handleReactionToggle(
       .eq('id', messageId)
       .single();
 
-    if (!msg) {
+    if (!msg || !msg.channel_id) {
       return;
     }
 
@@ -902,7 +1068,7 @@ async function handleReactionToggle(
       .eq('message_id', messageId);
 
     if (fetchError) {
-      console.error('[reaction:toggle] Failed to fetch reactions:', fetchError);
+      logger.error({ err: fetchError, messageId }, 'Failed to fetch reactions');
       return;
     }
 
@@ -928,96 +1094,32 @@ async function handleReactionToggle(
       type: 'reaction:updated',
       payload: { messageId, reactions },
     };
-    broadcastToRoom(channelId, serverMessage);
+    getManager().broadcastToRoom(channelId, serverMessage);
 
-    console.log(
-      `[reaction:toggle] message:${messageId} emoji:${emoji} by user:${userId}`,
-    );
+    logger.info({ messageId, emoji, userId }, 'Reaction toggled');
   } catch (err) {
-    console.error('[reaction:toggle] Error:', err);
+    logger.error({ err }, 'Error in reaction:toggle');
   }
 }
 
 /**
- * Handle WebSocket disconnection
+ * Helper to get the ConnectionManager singleton, throwing if not yet initialized.
  */
-function handleDisconnect(ws: WebSocket, user: WsUser): void {
-  try {
-    console.log(`[WebSocket] User disconnected: ${user.username} (${user.id})`);
-
-    // Get all channels this socket was in
-    const channels = socketChannels.get(ws);
-    if (channels) {
-      // Remove user from typing and online tracking for each channel
-      channels.forEach((channelId) => {
-        // Remove socket from channel room
-        channelRooms.get(channelId)?.delete(ws);
-        if (channelRooms.get(channelId)?.size === 0) {
-          channelRooms.delete(channelId);
-        }
-
-        // Remove from typing
-        const typing = typingUsers.get(channelId);
-        if (typing) {
-          typing.delete(user.username);
-
-          // Clear typing timeout
-          const timeoutKey = `${channelId}:${user.username}`;
-          const timeout = typingTimeouts.get(timeoutKey);
-          if (timeout) {
-            clearTimeout(timeout);
-            typingTimeouts.delete(timeoutKey);
-          }
-
-          // Emit updated typing state
-          const typingMessage: ServerMessage = {
-            type: 'typing:update',
-            payload: {
-              channelId,
-              users: Array.from(typing),
-            },
-          };
-          broadcastToRoom(channelId, typingMessage);
-
-          // Clean up empty typing sets
-          if (typing.size === 0) {
-            typingUsers.delete(channelId);
-          }
-        }
-
-        // Remove from online users
-        const online = onlineUsers.get(channelId);
-        if (online) {
-          online.delete(user.id);
-
-          // Emit updated presence
-          const presenceMessage: ServerMessage = {
-            type: 'presence:update',
-            payload: {
-              channelId,
-              users: Array.from(online),
-            },
-          };
-          broadcastToRoom(channelId, presenceMessage);
-
-          // Clean up empty online sets
-          if (online.size === 0) {
-            onlineUsers.delete(channelId);
-          }
-        }
-      });
-
-      // Clean up socket channels tracking
-      socketChannels.delete(ws);
-    }
-  } catch (err) {
-    console.error('[disconnect] Error:', err);
-  } finally {
-    // Clean up user tracking
-    socketUsers.delete(ws);
-    socketChannels.delete(ws);
-    socketBuckets.delete(ws);
+function getManager(): ConnectionManager {
+  if (!connectionManager) {
+    throw new Error(
+      'ConnectionManager not initialized — handleWebSocketConnection must be called first',
+    );
   }
+  return connectionManager;
+}
+
+/**
+ * Get all currently connected WebSocket instances (backward-compatible export for socket.ts)
+ */
+export function getConnectedSockets(): WebSocket[] {
+  if (!connectionManager) return [];
+  return connectionManager.getConnectedSockets();
 }
 
 /**
@@ -1027,27 +1129,36 @@ export function handleWebSocketConnection(
   socket: WebSocket,
   user: WsUser,
   supabase: SupabaseClient<Database>,
+  logger: FastifyBaseLogger,
   pushSender?: PushSender,
 ): void {
-  console.log(`[WebSocket] User connected: ${user.username}`);
+  // Lazily initialize the singleton ConnectionManager
+  if (!connectionManager) {
+    connectionManager = new ConnectionManager(logger);
+  }
 
-  // Track user for this socket
-  socketUsers.set(socket, user);
-  socketChannels.set(socket, new Set());
-  socketBuckets.set(socket, new TokenBucket());
+  const mgr = connectionManager;
+
+  logger.info(
+    { userId: user.id, username: user.username },
+    'WebSocket user connected',
+  );
+
+  // Register this socket
+  mgr.registerSocket(socket, user);
 
   // Handle incoming messages
   socket.on('message', (data: Buffer) => {
-    handleMessage(socket, data.toString(), user, supabase, pushSender);
+    handleMessage(socket, data.toString(), user, supabase, logger, pushSender);
   });
 
   // Handle disconnection
   socket.on('close', () => {
-    handleDisconnect(socket, user);
+    mgr.handleDisconnect(socket, user);
   });
 
   // Handle errors
   socket.on('error', (err) => {
-    console.error(`WebSocket error for ${user.username}:`, err);
+    logger.error({ err, username: user.username }, 'WebSocket error');
   });
 }

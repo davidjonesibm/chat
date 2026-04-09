@@ -52,12 +52,30 @@ server.register(socketPlugin);
 // Register your application as a normal plugin with /api prefix
 server.register(app, { prefix: '/api' });
 
+// Graceful shutdown handler
+function shutdown(signal: string) {
+  server.log.info({ signal }, 'Received signal, shutting down');
+  server.close().then(
+    () => {
+      server.log.info('Server closed successfully');
+      process.exit(0);
+    },
+    (err) => {
+      server.log.error({ err }, 'Error during shutdown');
+      process.exit(1);
+    },
+  );
+}
+
 // Start listening
 server.listen({ port, host }, (err) => {
   if (err) {
     server.log.error(err);
     process.exit(1);
   } else {
-    console.log(`[ ready ] http://${host}:${port}`);
+    server.log.info({ host, port }, 'Server ready');
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
   }
 });

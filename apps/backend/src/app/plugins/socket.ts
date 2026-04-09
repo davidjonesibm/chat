@@ -3,8 +3,14 @@ import websocket from '@fastify/websocket';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { WebSocket } from 'ws';
 import type { PushSender } from '../handlers/chat.js';
-import { handleWebSocketConnection } from '../handlers/chat.js';
+import {
+  handleWebSocketConnection,
+  getConnectedSockets,
+} from '../handlers/chat.js';
 import type { PushNotificationPayload } from '@chat/shared';
+import { verifySupabaseJwt } from '../utils/jwt.js';
+
+const jwtSecret = process.env.SUPABASE_JWT_SECRET ?? '';
 
 export default fp(
   async (fastify: FastifyInstance) => {
@@ -102,15 +108,13 @@ export default fp(
                 },
                 'Failed to send push notification',
               );
-              throw err;
             }
           }
         });
 
-        await Promise.all(sendPromises);
+        await Promise.allSettled(sendPromises);
       } catch (err) {
         fastify.log.error({ err, userId }, 'Error in sendPushToUser');
-        throw err;
       }
     };
 
@@ -127,29 +131,46 @@ export default fp(
               return;
             }
 
-            // Verify token using Supabase's built-in verification
-            const {
-              data: { user },
-              error,
-            } = await fastify.supabaseAdmin.auth.getUser(token);
-            if (error || !user) {
-              reply.code(401).send({ error: 'Invalid or expired token' });
-              return;
-            }
+            if (jwtSecret) {
+              // Local JWT verification — no network round-trip
+              const payload = await verifySupabaseJwt(token, jwtSecret);
+              const now = new Date().toISOString();
+              request.user = {
+                id: payload.id,
+                email: payload.email,
+                username:
+                  (payload.user_metadata.username as string) ||
+                  (payload.user_metadata.name as string) ||
+                  payload.email.split('@')[0] ||
+                  '',
+                avatar: (payload.user_metadata.avatar as string) || '',
+                created_at: now,
+                updated_at: now,
+              };
+            } else {
+              // Fallback: verify via Supabase remote call
+              const {
+                data: { user },
+                error,
+              } = await fastify.supabaseAdmin.auth.getUser(token);
+              if (error || !user) {
+                reply.code(401).send({ error: 'Invalid or expired token' });
+                return;
+              }
 
-            // Build user object from Supabase user data
-            request.user = {
-              id: user.id,
-              email: user.email || '',
-              username:
-                (user.user_metadata?.username as string) ||
-                (user.user_metadata?.name as string) ||
-                user.email?.split('@')[0] ||
-                '',
-              avatar: (user.user_metadata?.avatar as string) || '',
-              created_at: user.created_at,
-              updated_at: user.updated_at || user.created_at,
-            };
+              request.user = {
+                id: user.id,
+                email: user.email || '',
+                username:
+                  (user.user_metadata?.username as string) ||
+                  (user.user_metadata?.name as string) ||
+                  user.email?.split('@')[0] ||
+                  '',
+                avatar: (user.user_metadata?.avatar as string) || '',
+                created_at: user.created_at,
+                updated_at: user.updated_at || user.created_at,
+              };
+            }
           } catch (err) {
             fastify.log.error({ err }, 'WebSocket authentication error');
             reply.code(401).send({ error: 'Authentication failed' });
@@ -166,10 +187,23 @@ export default fp(
           socket,
           request.user,
           fastify.supabaseAdmin,
+          fastify.log,
           sendPushToUser,
         );
       },
     );
+
+    // Graceful shutdown: close all WebSocket connections
+    fastify.addHook('onClose', async () => {
+      const sockets = getConnectedSockets();
+      fastify.log.info(
+        { count: sockets.length },
+        'Closing WebSocket connections',
+      );
+      for (const socket of sockets) {
+        socket.close(1001, 'Server shutting down');
+      }
+    });
 
     fastify.log.info('WebSocket handlers registered at /ws');
   },

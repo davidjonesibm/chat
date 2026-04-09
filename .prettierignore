@@ -4,3 +4,4 @@
 /.nx/cache
 /.nx/workspace-data
 *.agent.md
+*lock*

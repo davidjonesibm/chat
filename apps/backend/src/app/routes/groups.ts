@@ -1,5 +1,9 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
-import type { CreateGroupRequest, AddMemberRequest } from '@chat/shared';
+import type {
+  CreateGroupRequest,
+  CreateGroupResponse,
+  AddMemberRequest,
+} from '@chat/shared';
 
 function requireUser(request: FastifyRequest) {
   if (!request.user)
@@ -52,77 +56,25 @@ export default async function (fastify: FastifyInstance) {
       const { name, description } = request.body;
       const userId = requireUser(request).id;
 
-      // Create the group
-      const { data: group, error: groupError } = await fastify.supabaseAdmin
-        .from('groups')
-        .insert({
-          name: name.trim(),
-          description: description?.trim() || '',
-          owner_id: userId,
-        })
-        .select()
-        .single();
+      // Atomic: create group + member + default channel in a single transaction
+      const { data, error } = await fastify.supabaseAdmin.rpc(
+        'create_group_with_defaults',
+        {
+          p_name: name.trim(),
+          p_description: description?.trim() || '',
+          p_owner_id: userId,
+        },
+      );
 
-      if (groupError) {
-        fastify.log.error(groupError);
+      if (error) {
+        fastify.log.error(error);
         throw fastify.httpErrors.internalServerError('Failed to create group');
       }
 
-      // Add creator as member in group_members
-      const { error: memberError } = await fastify.supabaseAdmin
-        .from('group_members')
-        .insert({
-          group_id: group.id,
-          user_id: userId,
-        });
-
-      if (memberError) {
-        fastify.log.error(memberError);
-        throw fastify.httpErrors.internalServerError(
-          'Failed to add creator as member',
-        );
-      }
-
-      // Create the default #general channel
-      const { data: channel, error: channelError } = await fastify.supabaseAdmin
-        .from('channels')
-        .insert({
-          name: 'general',
-          group_id: group.id,
-          description: 'General discussion',
-          is_default: true,
-        })
-        .select()
-        .single();
-
-      if (channelError) {
-        fastify.log.error(channelError);
-        throw fastify.httpErrors.internalServerError(
-          'Failed to create default channel',
-        );
-      }
+      const result = data as unknown as CreateGroupResponse;
 
       reply.code(201);
-      return {
-        group: {
-          id: group.id,
-          name: group.name,
-          description: group.description || '',
-          owner: group.owner_id,
-          members: [userId],
-          created_at: group.created_at,
-          updated_at: group.updated_at,
-        },
-        defaultChannel: {
-          id: channel.id,
-          name: channel.name,
-          group: channel.group_id,
-          description: channel.description || '',
-          is_default: channel.is_default,
-          created_at: channel.created_at,
-          updated_at: channel.updated_at,
-        },
-      };
+      return result;
     },
   );
 
@@ -157,7 +109,7 @@ export default async function (fastify: FastifyInstance) {
         throw fastify.httpErrors.internalServerError('Failed to fetch groups');
       }
 
-      // Extract groups from the nested structure, fetch members for each
+      // Extract groups from the nested structure
       type GroupRow = {
         id: string;
         name: string;
@@ -166,30 +118,47 @@ export default async function (fastify: FastifyInstance) {
         created_at: string;
         updated_at: string;
       };
-      const groups = await Promise.all(
-        (data || [])
-          .map((row) => row.groups as unknown as GroupRow | null)
-          .filter((g): g is GroupRow => g !== null)
-          .map(async (group) => {
-            // Get members for this group
-            const { data: members } = await fastify.supabaseAdmin
-              .from('group_members')
-              .select('user_id')
-              .eq('group_id', group.id);
+      const groupRows = (data || [])
+        .map((row) => row.groups as unknown as GroupRow | null)
+        .filter((g): g is GroupRow => g !== null);
 
-            return {
-              id: group.id,
-              name: group.name,
-              description: group.description || '',
-              owner: group.owner_id,
-              members: members?.map((m) => m.user_id) || [],
-              created_at: group.created_at,
-              updated_at: group.updated_at,
-            };
-          }),
-      );
+      // Batch-fetch all members in a single query instead of N+1
+      const groupIds = groupRows.map((g) => g.id);
+      const membersByGroup = new Map<string, string[]>();
 
-      return groups;
+      if (groupIds.length > 0) {
+        const { data: allMembers, error: membersError } =
+          await fastify.supabaseAdmin
+            .from('group_members')
+            .select('group_id, user_id')
+            .in('group_id', groupIds);
+
+        if (membersError) {
+          fastify.log.error(membersError);
+          throw fastify.httpErrors.internalServerError(
+            'Failed to fetch group members',
+          );
+        }
+
+        for (const row of allMembers || []) {
+          const existing = membersByGroup.get(row.group_id);
+          if (existing) {
+            existing.push(row.user_id);
+          } else {
+            membersByGroup.set(row.group_id, [row.user_id]);
+          }
+        }
+      }
+
+      return groupRows.map((group) => ({
+        id: group.id,
+        name: group.name,
+        description: group.description || '',
+        owner: group.owner_id,
+        members: membersByGroup.get(group.id) || [],
+        created_at: group.created_at,
+        updated_at: group.updated_at,
+      }));
     },
   );
 
@@ -457,6 +426,12 @@ export default async function (fastify: FastifyInstance) {
         .eq('id', groupId)
         .single();
 
+      if (!group) {
+        throw fastify.httpErrors.internalServerError(
+          'Failed to fetch updated group',
+        );
+      }
+
       const { data: members } = await fastify.supabaseAdmin
         .from('group_members')
         .select('user_id')
@@ -547,6 +522,12 @@ export default async function (fastify: FastifyInstance) {
         .select('*')
         .eq('id', groupId)
         .single();
+
+      if (!fullGroup) {
+        throw fastify.httpErrors.internalServerError(
+          'Failed to fetch updated group',
+        );
+      }
 
       const { data: members } = await fastify.supabaseAdmin
         .from('group_members')
