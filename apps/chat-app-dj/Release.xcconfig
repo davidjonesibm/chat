@@ -1,0 +1,6 @@
+// Release.xcconfig
+
+#include "Secrets.xcconfig"
+
+// Custom Info.plist with secret references (outside source sync group)
+INFOPLIST_FILE = Info.plist

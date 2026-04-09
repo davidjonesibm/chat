@@ -38,7 +38,15 @@ final class ChatStore {
 
         logger.info("Entering channel \(channelId)")
 
-        await webSocketService.connect(token: token)
+        do {
+            try await webSocketService.connect(token: token)
+        } catch {
+            logger.error("Failed to connect — \(error.localizedDescription)")
+            self.error = "Failed to connect to chat."
+            loading = false
+            return
+        }
+
         do {
             try await webSocketService.send(.channelJoin(.init(channelId: channelId)))
         } catch {
@@ -207,24 +215,54 @@ final class ChatStore {
         messageListenerTask = Task { [weak self] in
             guard let self else { return }
 
-            while !Task.isCancelled {
-                let stream = await webSocketService.messages()
+            // Start consuming messages for the current connection
+            var messageStreamTask: Task<Void, Never>? = Task { [weak self] in
+                await self?.consumeMessages()
+            }
 
-                do {
-                    for try await serverMessage in stream {
-                        if Task.isCancelled { break }
-                        await self.handleServerMessage(serverMessage)
+            // Observe state changes to handle reconnects
+            let states = await webSocketService.stateStream()
+
+            for await connectionState in states {
+                if Task.isCancelled { break }
+
+                switch connectionState {
+                case .connected:
+                    // Reconnected — cancel old stream, rejoin channel, start new stream
+                    messageStreamTask?.cancel()
+
+                    if let channelId = self.currentChannelId {
+                        do {
+                            try await self.webSocketService.send(.channelJoin(.init(channelId: channelId)))
+                        } catch {
+                            self.logger.error("Failed to rejoin channel — \(error.localizedDescription)")
+                        }
                     }
-                } catch {
-                    if !Task.isCancelled {
-                        self.logger.error("Message listener stream error: \(error.localizedDescription)")
+
+                    messageStreamTask = Task { [weak self] in
+                        await self?.consumeMessages()
                     }
+
+                default:
+                    messageStreamTask?.cancel()
+                    messageStreamTask = nil
                 }
+            }
 
-                // Stream ended — retry if we're still in a channel
-                guard !Task.isCancelled, self.currentChannelId != nil else { break }
-                self.logger.info("Message stream ended. Waiting to re-attach…")
-                try? await Task.sleep(for: .seconds(1))
+            messageStreamTask?.cancel()
+        }
+    }
+
+    private func consumeMessages() async {
+        let stream = await webSocketService.messages()
+        do {
+            for try await serverMessage in stream {
+                if Task.isCancelled { break }
+                handleServerMessage(serverMessage)
+            }
+        } catch {
+            if !Task.isCancelled {
+                logger.error("Message stream error: \(error.localizedDescription)")
             }
         }
     }

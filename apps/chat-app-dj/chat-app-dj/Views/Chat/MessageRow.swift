@@ -34,24 +34,7 @@ struct MessageRow: View {
     // MARK: - System Message (Centered Divider)
 
     private var systemDivider: some View {
-        HStack(spacing: 8) {
-            dashedLine
-            Text(message.content)
-                .font(.caption)
-                .italic()
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-            dashedLine
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("System message: \(message.content)")
-    }
-
-    private var dashedLine: some View {
-        VStack { Divider() }
+        SystemMessageDivider(content: message.content)
     }
 
     // MARK: - Regular Message (Slack-style)
@@ -140,42 +123,7 @@ struct MessageRow: View {
     // MARK: - Giphy Content
 
     private var giphyContent: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let gifUrl = message.gifUrl,
-               let mediaId = Self.extractGiphyMediaId(from: gifUrl) {
-                GiphyAnimatedView(mediaId: mediaId)
-                    .frame(width: 250, height: 180)
-                    .clipShape(.rect(cornerRadius: 8))
-            } else if let gifUrl = message.gifUrl, let url = URL(string: gifUrl) {
-                // Fallback for non-standard GIPHY URLs
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 250, height: 180)
-                            .clipped()
-                    case .failure:
-                        gifPlaceholder(label: "Failed to load GIF")
-                    case .empty:
-                        gifPlaceholder(label: "Loading…")
-                            .overlay { ProgressView() }
-                    @unknown default:
-                        gifPlaceholder(label: "GIF")
-                    }
-                }
-                .frame(width: 250, height: 180)
-                .clipShape(.rect(cornerRadius: 8))
-            }
-
-            if !message.content.isEmpty {
-                Text(message.content)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(4)
-            }
-        }
+        GiphyContentView(gifUrl: message.gifUrl, content: message.content)
     }
 
     /// Extracts the GIPHY media ID from URLs like
@@ -193,67 +141,72 @@ struct MessageRow: View {
     // MARK: - Image Content
 
     private var imageContent: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let resolvedURL = resolvedImageURL, let url = URL(string: resolvedURL) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 250, height: 180)
-                            .clipped()
-                    case .failure:
-                        gifPlaceholder(label: "Failed to load image")
-                    case .empty:
-                        gifPlaceholder(label: "Loading…")
-                            .overlay { ProgressView() }
-                    @unknown default:
-                        gifPlaceholder(label: "Image")
-                    }
-                }
-                .frame(width: 250, height: 180)
-                .clipShape(.rect(cornerRadius: 8))
-            }
-
-            if !message.content.isEmpty {
-                Text(message.content)
-                    .font(.body)
-                    .foregroundStyle(.primary)
-                    .lineSpacing(4)
-            }
-        }
-    }
-
-    private func gifPlaceholder(label: String) -> some View {
-        RoundedRectangle(cornerRadius: 8)
-            .fill(Color(.systemGray5))
-            .frame(width: 250, height: 180)
-            .overlay {
-                Text(label)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-    }
-
-    /// Resolve image_url: if already absolute, use as-is; otherwise prepend Supabase URL.
-    private var resolvedImageURL: String? {
-        guard let imageUrl = message.imageUrl, !imageUrl.isEmpty else { return nil }
-        if imageUrl.hasPrefix("http") { return imageUrl }
-        return Config.supabaseURL + imageUrl
+        ImageContentView(imageUrl: message.imageUrl, content: message.content)
     }
 
     // MARK: - Reactions Row
 
     private var reactionsRow: some View {
+        MessageReactionsRow(
+            reactions: visibleReactions,
+            currentUserId: currentUserId,
+            onReact: { emoji in onReact(message.id, emoji) },
+            onAddReaction: { onLongPress(message) }
+        )
+    }
+
+    // MARK: - Accessibility
+
+    private var accessibilityDescription: String {
+        let time = DateFormatting.formatTime(message.createdAt)
+        return "Message from \(message.sender.username) at \(time): \(message.content)"
+    }
+}
+
+// MARK: - System Message Divider
+
+private struct SystemMessageDivider: View {
+    let content: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            dashedLine
+            Text(content)
+                .font(.caption)
+                .italic()
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            dashedLine
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("System message: \(content)")
+    }
+
+    private var dashedLine: some View {
+        VStack { Divider() }
+    }
+}
+
+// MARK: - Message Reactions Row
+
+private struct MessageReactionsRow: View {
+    let reactions: [ReactionSummary]
+    let currentUserId: String
+    let onReact: (String) -> Void
+    let onAddReaction: () -> Void
+
+    var body: some View {
         FlowLayout(spacing: 4) {
-            ForEach(visibleReactions, id: \.emoji) { reaction in
+            ForEach(reactions, id: \.emoji) { reaction in
                 reactionBadge(reaction)
             }
 
             // Add reaction button
             Button {
-                onLongPress(message)
+                onAddReaction()
             } label: {
                 Image(systemName: "face.smiling")
                     .font(.subheadline)
@@ -269,7 +222,7 @@ struct MessageRow: View {
     private func reactionBadge(_ reaction: ReactionSummary) -> some View {
         let isOwn = reaction.userIds.contains(currentUserId)
         return Button {
-            onReact(message.id, reaction.emoji)
+            onReact(reaction.emoji)
         } label: {
             HStack(spacing: 3) {
                 Text(reaction.emoji)
@@ -291,12 +244,120 @@ struct MessageRow: View {
         .accessibilityLabel("\(reaction.emoji) \(reaction.count) reactions")
         .accessibilityHint(isOwn ? "Tap to remove your reaction" : "Tap to react")
     }
+}
 
-    // MARK: - Accessibility
+// MARK: - Giphy Content View
 
-    private var accessibilityDescription: String {
-        let time = DateFormatting.formatTime(message.createdAt)
-        return "Message from \(message.sender.username) at \(time): \(message.content)"
+private struct GiphyContentView: View {
+    let gifUrl: String?
+    let content: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let gifUrl,
+               let mediaId = MessageRow.extractGiphyMediaId(from: gifUrl) {
+                GiphyAnimatedView(mediaId: mediaId)
+                    .frame(width: 250, height: 180)
+                    .clipShape(.rect(cornerRadius: 8))
+            } else if let gifUrl, let url = URL(string: gifUrl) {
+                // Fallback for non-standard GIPHY URLs
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 250, height: 180)
+                            .clipped()
+                    case .failure:
+                        mediaThumbnailPlaceholder(label: "Failed to load GIF")
+                    case .empty:
+                        mediaThumbnailPlaceholder(label: "Loading…")
+                            .overlay { ProgressView() }
+                    @unknown default:
+                        mediaThumbnailPlaceholder(label: "GIF")
+                    }
+                }
+                .frame(width: 250, height: 180)
+                .clipShape(.rect(cornerRadius: 8))
+            }
+
+            if !content.isEmpty {
+                Text(content)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .lineSpacing(4)
+            }
+        }
+    }
+
+    private func mediaThumbnailPlaceholder(label: String) -> some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(Color(.systemGray5))
+            .frame(width: 250, height: 180)
+            .overlay {
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+    }
+}
+
+// MARK: - Image Content View
+
+private struct ImageContentView: View {
+    let imageUrl: String?
+    let content: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if let resolvedURL, let url = URL(string: resolvedURL) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 250, height: 180)
+                            .clipped()
+                    case .failure:
+                        mediaThumbnailPlaceholder(label: "Failed to load image")
+                    case .empty:
+                        mediaThumbnailPlaceholder(label: "Loading…")
+                            .overlay { ProgressView() }
+                    @unknown default:
+                        mediaThumbnailPlaceholder(label: "Image")
+                    }
+                }
+                .frame(width: 250, height: 180)
+                .clipShape(.rect(cornerRadius: 8))
+            }
+
+            if !content.isEmpty {
+                Text(content)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .lineSpacing(4)
+            }
+        }
+    }
+
+    /// Resolve image_url: if already absolute, use as-is; otherwise prepend Supabase URL.
+    private var resolvedURL: String? {
+        guard let imageUrl, !imageUrl.isEmpty else { return nil }
+        if imageUrl.hasPrefix("http") { return imageUrl }
+        return Config.supabaseURL + imageUrl
+    }
+
+    private func mediaThumbnailPlaceholder(label: String) -> some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(Color(.systemGray5))
+            .frame(width: 250, height: 180)
+            .overlay {
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
     }
 }
 
@@ -354,7 +415,7 @@ private struct GiphyAnimatedView: UIViewRepresentable {
 
     private func fetchMedia(mediaId: String, container: UIView, mediaView: GPHMediaView) {
         GiphyCore.shared.gifByID(mediaId) { response, error in
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 container.viewWithTag(100)?.removeFromSuperview()
                 if let media = response?.data {
                     mediaView.setMedia(media)

@@ -48,7 +48,13 @@ actor APIClient {
 
     init(baseURL: String = Config.apiBaseURL) {
         self.baseURL = baseURL
-        self.session = URLSession.shared
+
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 120
+        config.waitsForConnectivity = true
+        config.httpMaximumConnectionsPerHost = 6
+        self.session = URLSession(configuration: config)
 
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
@@ -64,9 +70,11 @@ actor APIClient {
         path: String,
         queryItems: [URLQueryItem]? = nil
     ) async throws -> T {
-        var request = try buildRequest(path: path, method: "GET", queryItems: queryItems)
-        applyAuth(&request)
-        return try await perform(request)
+        try await withRetry {
+            var request = try self.buildRequest(path: path, method: "GET", queryItems: queryItems)
+            self.applyAuth(&request)
+            return try await self.perform(request)
+        }
     }
 
     // MARK: - POST with response
@@ -75,11 +83,13 @@ actor APIClient {
         path: String,
         body: B
     ) async throws -> T {
-        var request = try buildRequest(path: path, method: "POST")
-        applyAuth(&request)
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try encoder.encode(body)
-        return try await perform(request)
+        try await withRetry {
+            var request = try self.buildRequest(path: path, method: "POST")
+            self.applyAuth(&request)
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try self.encoder.encode(body)
+            return try await self.perform(request)
+        }
     }
 
     // MARK: - POST without response body
@@ -88,11 +98,13 @@ actor APIClient {
         path: String,
         body: B
     ) async throws {
-        var request = try buildRequest(path: path, method: "POST")
-        applyAuth(&request)
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try encoder.encode(body)
-        try await performVoid(request)
+        try await withRetry {
+            var request = try self.buildRequest(path: path, method: "POST")
+            self.applyAuth(&request)
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try self.encoder.encode(body)
+            try await self.performVoid(request)
+        }
     }
 
     // MARK: - PATCH
@@ -101,19 +113,23 @@ actor APIClient {
         path: String,
         body: B
     ) async throws -> T {
-        var request = try buildRequest(path: path, method: "PATCH")
-        applyAuth(&request)
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try encoder.encode(body)
-        return try await perform(request)
+        try await withRetry {
+            var request = try self.buildRequest(path: path, method: "PATCH")
+            self.applyAuth(&request)
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try self.encoder.encode(body)
+            return try await self.perform(request)
+        }
     }
 
     // MARK: - DELETE
 
     func delete(path: String) async throws {
-        var request = try buildRequest(path: path, method: "DELETE")
-        applyAuth(&request)
-        try await performVoid(request)
+        try await withRetry {
+            var request = try self.buildRequest(path: path, method: "DELETE")
+            self.applyAuth(&request)
+            try await self.performVoid(request)
+        }
     }
 
     // MARK: - DELETE with body
@@ -122,11 +138,13 @@ actor APIClient {
         path: String,
         body: B
     ) async throws {
-        var request = try buildRequest(path: path, method: "DELETE")
-        applyAuth(&request)
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try encoder.encode(body)
-        try await performVoid(request)
+        try await withRetry {
+            var request = try self.buildRequest(path: path, method: "DELETE")
+            self.applyAuth(&request)
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try self.encoder.encode(body)
+            try await self.performVoid(request)
+        }
     }
 
     // MARK: - Multipart Upload
@@ -138,41 +156,69 @@ actor APIClient {
         mimeType: String,
         fields: [String: String]? = nil
     ) async throws -> T {
-        var request = try buildRequest(path: path, method: "POST")
-        applyAuth(&request)
+        try await withRetry {
+            var request = try self.buildRequest(path: path, method: "POST")
+            self.applyAuth(&request)
 
-        let boundary = UUID().uuidString
-        request.setValue(
-            "multipart/form-data; boundary=\(boundary)",
-            forHTTPHeaderField: "Content-Type"
-        )
+            let boundary = UUID().uuidString
+            request.setValue(
+                "multipart/form-data; boundary=\(boundary)",
+                forHTTPHeaderField: "Content-Type"
+            )
 
-        var body = Data()
+            var body = Data()
 
-        // Add text fields
-        if let fields {
-            for (key, value) in fields {
-                body.appendString("--\(boundary)\r\n")
-                body.appendString("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n")
-                body.appendString("\(value)\r\n")
+            // Add text fields
+            if let fields {
+                for (key, value) in fields {
+                    body.appendString("--\(boundary)\r\n")
+                    body.appendString("Content-Disposition: form-data; name=\"\(key)\"\r\n\r\n")
+                    body.appendString("\(value)\r\n")
+                }
             }
+
+            // Add file data
+            body.appendString("--\(boundary)\r\n")
+            body.appendString(
+                "Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n"
+            )
+            body.appendString("Content-Type: \(mimeType)\r\n\r\n")
+            body.append(fileData)
+            body.appendString("\r\n")
+            body.appendString("--\(boundary)--\r\n")
+
+            request.httpBody = body
+            return try await self.perform(request)
         }
-
-        // Add file data
-        body.appendString("--\(boundary)\r\n")
-        body.appendString(
-            "Content-Disposition: form-data; name=\"file\"; filename=\"\(fileName)\"\r\n"
-        )
-        body.appendString("Content-Type: \(mimeType)\r\n\r\n")
-        body.append(fileData)
-        body.appendString("\r\n")
-        body.appendString("--\(boundary)--\r\n")
-
-        request.httpBody = body
-        return try await perform(request)
     }
 
     // MARK: - Private Helpers
+
+    private func withRetry<T: Sendable>(
+        maxAttempts: Int = 3,
+        operation: () async throws -> T
+    ) async throws -> T {
+        var lastError: Error?
+        for attempt in 0..<maxAttempts {
+            do {
+                return try await operation()
+            } catch let error as APIError {
+                switch error {
+                case .networkError, .serverError:
+                    lastError = error
+                    if attempt < maxAttempts - 1 {
+                        let delay = min(pow(2.0, Double(attempt)), 8.0)
+                        try? await Task.sleep(for: .seconds(delay))
+                    }
+                default:
+                    throw error
+                }
+            } catch {
+                throw error
+            }
+        }
+        throw lastError ?? APIError.networkError(URLError(.unknown))
+    }
 
     private func buildRequest(
         path: String,
@@ -246,16 +292,6 @@ actor APIClient {
             throw APIError.badRequest(message)
         default:
             throw APIError.serverError(message)
-        }
-    }
-}
-
-// MARK: - Data Extension
-
-private extension Data {
-    mutating func appendString(_ string: String) {
-        if let data = string.data(using: .utf8) {
-            append(data)
         }
     }
 }

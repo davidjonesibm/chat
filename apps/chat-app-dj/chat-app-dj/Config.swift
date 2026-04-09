@@ -2,15 +2,24 @@ import Foundation
 
 nonisolated enum Config {
     // Backend API base URL (no trailing slash)
-    static let apiBaseURL: String = "https://192.168.86.20:8443/api"
+    static let apiBaseURL: String = value(for: "API_BASE_URL")
 
     // WebSocket URL
-    static let wsURL: String = "wss://192.168.86.20:8443/ws"
+    static let wsURL: String = value(for: "WS_URL")
 
     // Supabase configuration
-    static let supabaseURL: String = "https://192.168.86.20:8443"
-    static let supabaseAnonKey: String = "sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH"
+    static let supabaseURL: String = value(for: "SUPABASE_URL")
+    static let supabaseAnonKey: String = value(for: "SUPABASE_ANON_KEY")
 
     // GIPHY API Key
-    static let giphyAPIKey: String = "rBNut5aYm9PvYaKt15HrAV981xi6JpGn"
+    static let giphyAPIKey: String = value(for: "GIPHY_API_KEY")
+
+    // MARK: - Helpers
+
+    private static func value(for key: String) -> String {
+        guard let value = Bundle.main.infoDictionary?[key] as? String, !value.isEmpty else {
+            fatalError("Missing or empty Info.plist key: \(key). Check that Secrets.xcconfig is configured.")
+        }
+        return value
+    }
 }

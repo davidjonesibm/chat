@@ -21,3 +21,6 @@ dist
 tmp
 
 Caddyfile*
+
+# Xcode secrets
+**/Secrets.xcconfig

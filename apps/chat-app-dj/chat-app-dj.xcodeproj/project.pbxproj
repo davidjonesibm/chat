@@ -16,6 +16,8 @@
 
 /* Begin PBXFileReference section */
 		63E293D42F85852300A864CB /* chat-app-dj.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "chat-app-dj.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		63E293F02F85A00000A864CB /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = SOURCE_ROOT; };
+		63E293F12F85A00000A864CB /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -45,6 +47,8 @@
 		63E293CB2F85852300A864CB = {
 			isa = PBXGroup;
 			children = (
+				63E293F02F85A00000A864CB /* Debug.xcconfig */,
+				63E293F12F85A00000A864CB /* Release.xcconfig */,
 				63E293D62F85852300A864CB /* chat-app-dj */,
 				63E293E92F85929B00A864CB /* Frameworks */,
 				63E293D52F85852300A864CB /* Products */,
@@ -158,6 +162,7 @@
 /* Begin XCBuildConfiguration section */
 		63E293DD2F85852400A864CB /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 63E293F02F85A00000A864CB /* Debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -219,6 +224,7 @@
 		};
 		63E293DE2F85852400A864CB /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 63E293F12F85A00000A864CB /* Release.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;

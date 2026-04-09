@@ -10,8 +10,6 @@ import {
 import type { PushNotificationPayload } from '@chat/shared';
 import { verifySupabaseJwt } from '../utils/jwt.js';
 
-const jwtSecret = process.env.SUPABASE_JWT_SECRET ?? '';
-
 export default fp(
   async (fastify: FastifyInstance) => {
     // Register @fastify/websocket plugin
@@ -131,9 +129,10 @@ export default fp(
               return;
             }
 
-            if (jwtSecret) {
-              // Local JWT verification — no network round-trip
-              const payload = await verifySupabaseJwt(token, jwtSecret);
+            // Primary path: JWKS-based JWT verification
+            let authenticated = false;
+            try {
+              const payload = await verifySupabaseJwt(token);
               const now = new Date().toISOString();
               request.user = {
                 id: payload.id,
@@ -147,7 +146,14 @@ export default fp(
                 created_at: now,
                 updated_at: now,
               };
-            } else {
+              authenticated = true;
+            } catch {
+              fastify.log.debug(
+                'JWKS verification failed for WebSocket, falling back to Supabase remote verification',
+              );
+            }
+
+            if (!authenticated) {
               // Fallback: verify via Supabase remote call
               const {
                 data: { user },

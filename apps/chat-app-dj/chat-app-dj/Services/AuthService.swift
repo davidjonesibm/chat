@@ -2,15 +2,16 @@ import Foundation
 import Supabase
 
 actor AuthService {
-    static let shared = AuthService()
+    // Production singleton — Config values guaranteed at build time via xcconfig
+    static let shared = try! AuthService()
 
     private static let tokenKeychainKey = "com.chatapp.accessToken"
 
     private let client: SupabaseClient
 
-    init() {
+    init() throws {
         guard let supabaseURL = URL(string: Config.supabaseURL) else {
-            fatalError("Invalid Supabase URL: \(Config.supabaseURL)")
+            throw AuthError.invalidConfiguration("Invalid Supabase URL: \(Config.supabaseURL)")
         }
         self.client = SupabaseClient(
             supabaseURL: supabaseURL,
@@ -75,10 +76,11 @@ actor AuthService {
 
     // MARK: - Auth State Changes
 
-    nonisolated func authStateChanges() -> AsyncStream<(event: AuthChangeEvent, token: String?)> {
-        AsyncStream { continuation in
+    func authStateChanges() -> AsyncStream<(event: AuthChangeEvent, token: String?)> {
+        let changes = client.auth.authStateChanges
+        return AsyncStream { continuation in
             let task = Task {
-                for await (event, session) in client.auth.authStateChanges {
+                for await (event, session) in changes {
                     continuation.yield((event: event, token: session?.accessToken))
                 }
                 continuation.finish()
@@ -131,6 +133,7 @@ actor AuthService {
 enum AuthError: Error, LocalizedError, Sendable {
     case noSession
     case invalidCredentials
+    case invalidConfiguration(String)
 
     var errorDescription: String? {
         switch self {
@@ -138,6 +141,8 @@ enum AuthError: Error, LocalizedError, Sendable {
             "No session returned — email confirmation may be required"
         case .invalidCredentials:
             "Invalid email or password"
+        case .invalidConfiguration(let detail):
+            "Configuration error: \(detail)"
         }
     }
 }

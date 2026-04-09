@@ -30,5 +30,10 @@ struct AuthenticatedRootView: View {
         .environment(groupStore)
         .environment(channelStore)
         .environment(chatStore)
+        .onChange(of: router.path.count) { oldCount, newCount in
+            if newCount < oldCount, chatStore.currentChannelId != nil {
+                Task { await chatStore.leaveChannel() }
+            }
+        }
     }
 }

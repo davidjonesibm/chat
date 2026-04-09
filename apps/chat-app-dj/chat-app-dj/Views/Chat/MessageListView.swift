@@ -210,46 +210,18 @@ struct MessageListView: View {
     // MARK: - Date Separator
 
     private func dateSeparator(label: String) -> some View {
-        HStack(spacing: 8) {
-            VStack { Divider() }
-            Text(label)
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(.secondary)
-                .layoutPriority(1)
-            VStack { Divider() }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Date: \(label)")
+        DateSeparatorView(label: label)
     }
 
     // MARK: - Unread Banner
 
     private var unreadBanner: some View {
-        Button {
+        UnreadBanner(count: unreadCount) {
             unreadCount = 0
             isNearBottom = true
             shouldAnimateScroll = true
             scrollTarget = Self.bottomAnchorId
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "arrow.down")
-                    .font(.caption2.bold())
-                Text("\(unreadCount) new \(unreadCount == 1 ? "message" : "messages")")
-                    .font(.caption.bold())
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .background(.thinMaterial)
-            .clipShape(Capsule())
-            .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
         }
-        .buttonStyle(.plain)
-        .padding(.bottom, 8)
-        .transition(.move(edge: .bottom).combined(with: .opacity))
-        .accessibilityLabel("\(unreadCount) new \(unreadCount == 1 ? "message" : "messages"). Tap to scroll to bottom.")
     }
 
     // MARK: - Empty / Loading Overlay
@@ -286,6 +258,57 @@ struct MessageListView: View {
                 unreadCount += 1
             }
         }
+    }
+}
+
+// MARK: - Date Separator View
+
+private struct DateSeparatorView: View {
+    let label: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack { Divider() }
+            Text(label)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+                .layoutPriority(1)
+            VStack { Divider() }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Date: \(label)")
+    }
+}
+
+// MARK: - Unread Banner
+
+private struct UnreadBanner: View {
+    let count: Int
+    let onTap: () -> Void
+
+    var body: some View {
+        Button {
+            onTap()
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.down")
+                    .font(.caption2.bold())
+                Text("\(count) new \(count == 1 ? "message" : "messages")")
+                    .font(.caption.bold())
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(.thinMaterial)
+            .clipShape(Capsule())
+            .shadow(color: .black.opacity(0.15), radius: 4, y: 2)
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, 8)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .accessibilityLabel("\(count) new \(count == 1 ? "message" : "messages"). Tap to scroll to bottom.")
     }
 }
 

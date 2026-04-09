@@ -134,7 +134,7 @@ final class AuthStore {
     private func startAuthListener() {
         authListenerTask?.cancel()
         authListenerTask = Task {
-            for await (event, accessToken) in AuthService.shared.authStateChanges() {
+            for await (event, accessToken) in await AuthService.shared.authStateChanges() {
                 guard !Task.isCancelled else { return }
 
                 if let accessToken {

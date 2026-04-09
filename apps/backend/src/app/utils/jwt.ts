@@ -1,4 +1,4 @@
-import { jwtVerify, errors } from 'jose';
+import { createRemoteJWKSet, jwtVerify, errors } from 'jose';
 
 export interface JwtUserPayload {
   id: string;
@@ -6,20 +6,23 @@ export interface JwtUserPayload {
   user_metadata: Record<string, unknown>;
 }
 
+const supabaseUrl = process.env.SUPABASE_URL || 'http://localhost:54321';
+
+const jwksUrl = new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`);
+
+/** Cached JWKS fetcher — created once at module load, reused for every verification. */
+const jwks = createRemoteJWKSet(jwksUrl);
+
 /**
- * Verify a Supabase-issued JWT locally using the project's JWT secret.
+ * Verify a Supabase-issued JWT using the JWKS endpoint.
  * Returns a user-like object with id, email, and user_metadata extracted from the token payload.
  * Throws descriptive errors for expired or invalid tokens.
  */
 export async function verifySupabaseJwt(
   token: string,
-  jwtSecret: string,
 ): Promise<JwtUserPayload> {
-  const secret = new TextEncoder().encode(jwtSecret);
-
   try {
-    const { payload } = await jwtVerify(token, secret, {
-      // Supabase tokens use the "authenticated" audience
+    const { payload } = await jwtVerify(token, jwks, {
       audience: 'authenticated',
     });
 

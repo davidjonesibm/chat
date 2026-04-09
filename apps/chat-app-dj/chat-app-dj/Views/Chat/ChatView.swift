@@ -47,9 +47,6 @@ struct ChatView: View {
             guard let token = authStore.token else { return }
             await chatStore.enterChannel(channelId: channelId, token: token)
         }
-        .onDisappear {
-            Task { await chatStore.leaveChannel() }
-        }
         .sheet(isPresented: $showGiphyPicker) {
             GiphyPickerView { gifUrl in
                 pendingGifUrl = gifUrl

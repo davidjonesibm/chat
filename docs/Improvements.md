@@ -163,7 +163,7 @@ _Fixes H1, H3, H4, H20, M7–M9_
 - Refactor module-level Maps into a connection state class
 - Add graceful shutdown (`SIGTERM`/`SIGINT` handlers)
 - Replace `console.log` with Pino logger throughout `chat.ts`
-- Consider local JWT verification for auth
+- ✅ Switch to JWKS-based local JWT verification (M7)
 - Make group creation transactional (Supabase RPC)
 
 ### Phase 6: iOS App Improvements

@@ -3,8 +3,6 @@ import fp from 'fastify-plugin';
 import type { User } from '@chat/shared';
 import { verifySupabaseJwt } from '../utils/jwt.js';
 
-const jwtSecret = process.env.SUPABASE_JWT_SECRET ?? '';
-
 /**
  * Build a User object from a Supabase auth user or a local JWT payload.
  */
@@ -32,8 +30,8 @@ function buildUserFromMetadata(
 /**
  * Reusable authentication function
  * Verifies JWT tokens and attaches user context to request.
- * Uses local JWT verification when SUPABASE_JWT_SECRET is set,
- * otherwise falls back to Supabase's auth.getUser() remote call.
+ * Uses JWKS-based JWT verification as the primary path,
+ * falling back to Supabase's auth.getUser() remote call on failure.
  * Use as preHandler in route options: { preHandler: [authenticate] }
  */
 export async function authenticate(
@@ -52,39 +50,40 @@ export async function authenticate(
     throw reply.unauthorized('Invalid Authorization header format');
   }
 
-  if (jwtSecret) {
-    // Local JWT verification — no network round-trip
-    try {
-      const payload = await verifySupabaseJwt(token, jwtSecret);
-      const now = new Date().toISOString();
-      request.user = buildUserFromMetadata(
-        payload.id,
-        payload.email,
-        payload.user_metadata,
-        now,
-        now,
-      );
-    } catch {
-      throw reply.unauthorized('Invalid or expired token');
-    }
-  } else {
-    // Fallback: verify via Supabase remote call
-    const {
-      data: { user },
-      error,
-    } = await request.server.supabaseAdmin.auth.getUser(token);
-    if (error || !user) {
-      throw reply.unauthorized('Invalid or expired token');
-    }
-
+  // Primary path: JWKS-based JWT verification (no network round-trip to auth service)
+  try {
+    const payload = await verifySupabaseJwt(token);
+    const now = new Date().toISOString();
     request.user = buildUserFromMetadata(
-      user.id,
-      user.email || '',
-      (user.user_metadata as Record<string, unknown>) ?? {},
-      user.created_at,
-      user.updated_at || user.created_at,
+      payload.id,
+      payload.email,
+      payload.user_metadata,
+      now,
+      now,
+    );
+    return;
+  } catch {
+    request.log.debug(
+      'JWKS verification failed, falling back to Supabase remote verification',
     );
   }
+
+  // Fallback: verify via Supabase remote call
+  const {
+    data: { user },
+    error,
+  } = await request.server.supabaseAdmin.auth.getUser(token);
+  if (error || !user) {
+    throw reply.unauthorized('Invalid or expired token');
+  }
+
+  request.user = buildUserFromMetadata(
+    user.id,
+    user.email || '',
+    (user.user_metadata as Record<string, unknown>) ?? {},
+    user.created_at,
+    user.updated_at || user.created_at,
+  );
 }
 
 /**
@@ -96,13 +95,9 @@ export default fp(
     // Decorate instance with authenticate function for convenience
     fastify.decorate('authenticate', authenticate);
 
-    if (jwtSecret) {
-      fastify.log.info('Auth plugin registered — using local JWT verification');
-    } else {
-      fastify.log.info(
-        'Auth plugin registered — using Supabase remote verification (set SUPABASE_JWT_SECRET for local verification)',
-      );
-    }
+    fastify.log.info(
+      'Auth plugin registered — using JWKS verification with Supabase remote fallback',
+    );
   },
   {
     name: 'auth-plugin',

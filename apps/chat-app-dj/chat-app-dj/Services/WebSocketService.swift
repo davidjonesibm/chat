@@ -3,53 +3,33 @@ import os
 
 // MARK: - SocketStream (Donny Wals pattern)
 
-/// An `AsyncSequence` wrapper around `URLSessionWebSocketTask` that allows
+/// A struct-based `AsyncSequence` wrapper around `URLSessionWebSocketTask` that allows
 /// iterating over incoming WebSocket messages using `for try await`.
-/// Pattern from: https://www.donnywals.com/iterating-over-web-socket-messages-with-async-await-in-swift/
-final class SocketStream: AsyncSequence, @unchecked Sendable {
-    typealias WebSocketStream = AsyncThrowingStream<URLSessionWebSocketTask.Message, Error>
-    typealias AsyncIterator = WebSocketStream.Iterator
+/// Each iterator calls `task.receive()` directly, eliminating shared mutable state.
+struct SocketStream: AsyncSequence, Sendable {
     typealias Element = URLSessionWebSocketTask.Message
 
-    private var continuation: WebSocketStream.Continuation?
     private let task: URLSessionWebSocketTask
-
-    private lazy var stream: WebSocketStream = {
-        return WebSocketStream { continuation in
-            self.continuation = continuation
-
-            Task {
-                var isAlive = true
-
-                while isAlive && task.closeCode == .invalid {
-                    do {
-                        let value = try await task.receive()
-                        continuation.yield(value)
-                    } catch {
-                        continuation.finish(throwing: error)
-                        isAlive = false
-                    }
-                }
-            }
-        }
-    }()
 
     init(task: URLSessionWebSocketTask) {
         self.task = task
-        task.resume()
-    }
-
-    deinit {
-        continuation?.finish()
     }
 
     func makeAsyncIterator() -> AsyncIterator {
-        return stream.makeAsyncIterator()
+        AsyncIterator(task: task)
     }
 
     func cancel() {
         task.cancel(with: .goingAway, reason: nil)
-        continuation?.finish()
+    }
+
+    struct AsyncIterator: AsyncIteratorProtocol {
+        let task: URLSessionWebSocketTask
+
+        mutating func next() async throws -> Element? {
+            guard task.closeCode == .invalid else { return nil }
+            return try await task.receive()
+        }
     }
 }
 
@@ -73,6 +53,7 @@ actor WebSocketService {
     private var currentToken: String?
     private var reconnectAttempts: Int = 0
     private var reconnectTask: Task<Void, Never>?
+    private var stateContinuations: [UUID: AsyncStream<ConnectionState>.Continuation] = [:]
 
     private let session: URLSession
     private let encoder = JSONEncoder()
@@ -84,25 +65,54 @@ actor WebSocketService {
 
     // MARK: - Init
 
-    init(session: URLSession = .shared) {
-        self.session = session
+    init() {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 60
+        config.waitsForConnectivity = true
+        self.session = URLSession(configuration: config)
+    }
+
+    // MARK: - State Broadcasting
+
+    /// Returns an `AsyncStream` that yields future connection state changes (does not yield the current state).
+    func stateStream() -> AsyncStream<ConnectionState> {
+        AsyncStream { continuation in
+            let id = UUID()
+            stateContinuations[id] = continuation
+            continuation.onTermination = { @Sendable [weak self] _ in
+                Task { [weak self] in
+                    await self?.removeStateContinuation(id: id)
+                }
+            }
+        }
+    }
+
+    private func removeStateContinuation(id: UUID) {
+        stateContinuations.removeValue(forKey: id)
+    }
+
+    private func setState(_ newState: ConnectionState) {
+        state = newState
+        for (_, continuation) in stateContinuations {
+            continuation.yield(newState)
+        }
     }
 
     // MARK: - Connect
 
-    func connect(token: String) {
+    func connect(token: String) async throws {
         guard state == .disconnected || state == .reconnecting else {
             logger.debug("Connect called while already \(String(describing: self.state)); ignoring.")
             return
         }
 
         currentToken = token
-        state = .connecting
+        setState(.connecting)
         logger.info("Connecting to WebSocket…")
 
         guard var components = URLComponents(string: Config.wsURL) else {
             logger.error("Invalid WebSocket URL: \(Config.wsURL)")
-            state = .disconnected
+            setState(.disconnected)
             return
         }
 
@@ -110,15 +120,35 @@ actor WebSocketService {
 
         guard let url = components.url else {
             logger.error("Could not build WebSocket URL with token query param.")
-            state = .disconnected
+            setState(.disconnected)
             return
         }
 
         let task = session.webSocketTask(with: url)
         webSocketTask = task
-        socketStream = SocketStream(task: task)
+        task.resume()
 
-        state = .connected
+        // Verify the handshake by sending a ping and awaiting the pong
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                task.sendPing { error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume()
+                    }
+                }
+            }
+        } catch {
+            logger.error("WebSocket handshake failed: \(error.localizedDescription)")
+            task.cancel(with: .goingAway, reason: nil)
+            webSocketTask = nil
+            setState(.disconnected)
+            throw error
+        }
+
+        socketStream = SocketStream(task: task)
+        setState(.connected)
         reconnectAttempts = 0
         logger.info("WebSocket connected.")
     }
@@ -134,12 +164,17 @@ actor WebSocketService {
         webSocketTask = nil
         currentToken = nil
         reconnectAttempts = 0
-        state = .disconnected
+        setState(.disconnected)
     }
 
     // MARK: - Send
 
     func send(_ message: ClientMessage) async throws {
+        guard state == .connected else {
+            logger.warning("Cannot send — WebSocket not connected (state: \(String(describing: self.state))).")
+            return
+        }
+
         guard let webSocketTask else {
             logger.warning("Cannot send message — no active WebSocket task.")
             return
@@ -162,6 +197,7 @@ actor WebSocketService {
     /// Iterates over the underlying `SocketStream`, decodes `.string` frames,
     /// and triggers reconnection when the stream ends unexpectedly.
     func messages() -> AsyncThrowingStream<ServerMessage, Error> {
+        let capturedStream = self.socketStream
         return AsyncThrowingStream { continuation in
             let iterateTask = Task { [weak self] in
                 guard let self else {
@@ -169,7 +205,7 @@ actor WebSocketService {
                     return
                 }
 
-                guard let stream = await self.socketStream else {
+                guard let stream = capturedStream else {
                     continuation.finish()
                     return
                 }
@@ -199,16 +235,16 @@ actor WebSocketService {
                         }
                     }
 
-                    // Stream ended — attempt reconnect if we didn't disconnect intentionally
+                    // Stream ended — trigger reconnect only if we were still connected
                     let currentState = await self.state
-                    if currentState != .disconnected {
+                    if currentState == .connected {
                         await self.logger.info("WebSocket stream ended. Attempting reconnect…")
                         await self.scheduleReconnect()
                     }
                     continuation.finish()
                 } catch {
                     let currentState = await self.state
-                    if currentState != .disconnected {
+                    if currentState == .connected {
                         await self.logger.error("WebSocket stream error: \(error.localizedDescription). Attempting reconnect…")
                         await self.scheduleReconnect()
                     }
@@ -231,17 +267,17 @@ actor WebSocketService {
     private func scheduleReconnect() {
         guard reconnectAttempts < maxReconnectAttempts else {
             logger.error("Max reconnect attempts (\(self.maxReconnectAttempts)) reached. Giving up.")
-            state = .disconnected
+            setState(.disconnected)
             return
         }
 
         guard let token = currentToken else {
             logger.error("No token available for reconnect.")
-            state = .disconnected
+            setState(.disconnected)
             return
         }
 
-        state = .reconnecting
+        setState(.reconnecting)
         reconnectAttempts += 1
 
         let delay = min(pow(2.0, Double(reconnectAttempts - 1)), maxReconnectDelay)
@@ -252,6 +288,7 @@ actor WebSocketService {
         socketStream = nil
         webSocketTask = nil
 
+        reconnectTask?.cancel()
         reconnectTask = Task { [weak self, token, delay] in
             do {
                 try await Task.sleep(for: .seconds(delay))
@@ -260,7 +297,12 @@ actor WebSocketService {
             }
 
             guard let self, !Task.isCancelled else { return }
-            await self.connect(token: token)
+            do {
+                try await self.connect(token: token)
+            } catch {
+                await self.logger.error("Reconnect failed: \(error.localizedDescription)")
+                await self.scheduleReconnect()
+            }
         }
     }
 }
