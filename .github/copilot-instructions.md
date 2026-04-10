@@ -86,6 +86,39 @@ After any code change, **always** run the following checks before considering th
 
 Never rely solely on build success — `tsc --noEmit` catches type errors that the build toolchain (esbuild, Vite) silently ignores.
 
+## Debugging & Logging Protocol
+
+When investigating a bug or unexpected behavior, **always instrument with logging before attempting a speculative fix**. Observe first, then fix — don't guess blindly.
+
+### Step 1: Add Diagnostic Logging
+
+Before changing any logic, add targeted log statements around the suspected code path to capture:
+
+- **Inputs**: Function arguments, request payloads, props/state at entry
+- **Control flow**: Which branch was taken, whether a guard returned early
+- **Outputs**: Return values, response payloads, emitted events
+- **Errors**: Full error objects (not just messages), stack traces where available
+
+### Step 2: Reproduce and Read Logs
+
+Ask the user to reproduce the issue (or reproduce it yourself if possible), then analyze the log output to identify the root cause before writing a fix.
+
+### Step 3: Fix and Retain Useful Logging
+
+After the fix, **keep logging that aids future diagnostics** (error catches, unexpected-state warnings). Remove overly verbose debug-only lines.
+
+### Stack-Specific Logging Patterns
+
+| Stack | Pattern | Example |
+|-------|---------|---------|
+| **Backend (Fastify)** | `fastify.log.{level}({ contextObj }, 'message')` | `fastify.log.debug({ userId, channelId }, 'Fetching messages')` |
+| **Frontend (Vue/TS)** | `console.{level}('[Tag]', ...data)` | `console.error('[ChannelStore] Failed to fetch:', err)` |
+| **iOS (Swift)** | `Logger(subsystem: "com.chatapp", category: "…")` | `logger.debug("Loading messages for channel \(channelId)")` |
+
+- **Backend**: Use Fastify's structured logger (`fastify.log.debug`, `.info`, `.warn`, `.error`). Always pass context as the first object arg for structured output. Never use bare `console.log` in backend code.
+- **Frontend**: Prefix every log with a bracketed tag matching the component/store name (e.g., `[ChannelStore]`, `[ChatView]`). Use `console.error` for caught exceptions, `console.warn` for unexpected-but-recoverable states.
+- **iOS**: Use `os.Logger` with subsystem `"com.chatapp"` and a descriptive category. Use `.debug` for diagnostic output, `.error` for failures. Never use bare `print()` in production code paths.
+
 ## Do NOT
 
 - Query Supabase directly from the frontend (except auth).

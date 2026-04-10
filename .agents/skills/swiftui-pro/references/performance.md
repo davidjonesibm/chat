@@ -9,9 +9,12 @@
 - Avoid creating properties to store formatters such as `DateFormatter` unless they are required. A more natural approach is to use `Text` with a format, like this: `Text(Date.now, format: .dateTime.day().month().year())` or `Text(100, format: .currency(code: "USD"))`.
 - Avoid expensive inline transforms in `List`/`ForEach` initializers (e.g. `items.filter { ... }`) when they are repeated often.
 - Prefer deriving transformed data from the source-of-truth using `let`, or caching in `@State`. However, do not cache derived collections in `@State` unless you also own explicit invalidation logic to avoid stale UI.
-- For large data sets in `ScrollView`, use `LazyVStack`/`LazyHStack`; flag eager stacks with many children.
+- For large data sets in `ScrollView`, use `LazyVStack`/`LazyHStack`; flag eager stacks with many children. Similarly, use `LazyVGrid`/`LazyHGrid` for grid layouts with large data sets.
 - Prefer using `task()` over `onAppear()` when doing async work, because it will be cancelled automatically when the view disappears.
 - Avoid storing escaping `@ViewBuilder` closures on views when possible; store built view results instead.
+- Use `geometryGroup()` to isolate geometry changes in a view subtree and prevent them from propagating to parent animations unexpectedly.
+- Use `drawingGroup()` to offload complex view hierarchies (heavy gradients, many overlapping layers) to Metal for GPU-accelerated rendering. This is particularly useful for views with many small shapes or blending operations.
+- Prefer `equatable()` on views with expensive `body` computations to prevent unnecessary re-renders when the new value equals the old value.
 
 Example:
 
@@ -44,3 +47,10 @@ struct CardView<Content: View>: View {
     }
 }
 ```
+
+## Scroll performance
+
+- Use `scrollPosition(_:anchor:)` with `ScrollPosition` for efficient programmatic scroll control; prefer this over `ScrollViewReader` for new code.
+- Use `onScrollGeometryChange(for:of:action:)` to respond to scroll offset changes instead of embedding a `GeometryReader` inside a scroll view.
+- Use `onScrollVisibilityChange(threshold:)` for efficiently triggering actions when items scroll on/off screen (e.g. lazy image loading, analytics).
+- Use `scrollTargetBehavior(_:)` with `.paging` or `.viewAligned` for snap-to-item scrolling instead of custom gesture-based solutions.

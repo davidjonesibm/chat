@@ -11,6 +11,8 @@ export interface MessageRecord extends BaseRecord {
   type: 'text' | 'system' | 'giphy' | 'image';
   gif_url?: string;
   image_url?: string;
+  image_width?: number | null;
+  image_height?: number | null;
   seq: number;
 }
 
@@ -23,6 +25,8 @@ export type Message = Pick<
   | 'type'
   | 'gif_url'
   | 'image_url'
+  | 'image_width'
+  | 'image_height'
   | 'seq'
   | 'created_at'
   | 'updated_at'
@@ -43,6 +47,8 @@ export interface MessageWithSender {
   type: 'text' | 'system' | 'giphy' | 'image';
   gif_url?: string;
   image_url?: string;
+  image_width?: number | null;
+  image_height?: number | null;
   seq: number;
   created_at: string;
   updated_at: string;

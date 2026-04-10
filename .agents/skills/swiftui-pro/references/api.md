@@ -16,6 +16,24 @@
 - `ForEach` over an `enumerated()` sequence should not convert to an array first. Use `ForEach(items.enumerated(), id: \.element.id)` directly.
 - When hiding scroll indicators, use `.scrollIndicators(.hidden)` rather than `showsIndicators: false` in the initializer.
 - Never use `Text` concatenation with `+`.
+- Never use the deprecated `MagnificationGesture` or `RotationGesture`; use `MagnifyGesture` and `RotateGesture` instead, which provide both velocity and position.
+- When customizing push transitions on a `NavigationStack`, use `navigationTransition(_:)` and `matchedTransitionSource(id:in:)` for zoom or custom transitions.
+- When sizing sheets, use `presentationSizing(_:)` with values like `.form` or `.page` rather than hard-coded frame sizes.
+- Use `MeshGradient` for rich, multi-point color gradients instead of multiple layered `LinearGradient` or `RadialGradient` views.
+- When applying symbol effects, use `symbolEffect(_:options:value:)` with effects like `.wiggle`, `.rotate`, and `.breathe` rather than manual animations on SF Symbols.
+- Use `textInputSuggestions(_:)` for adding inline text suggestions to text fields instead of building custom autocomplete UI.
+- Use `@Previewable` inside `#Preview` to create inline dynamic properties (e.g. `@Previewable @State var`) without needing a wrapper view.
+
+## Liquid Glass (iOS 26)
+
+Liquid Glass is the defining visual system in iOS 26. Use these APIs for modern, system-consistent styling:
+
+- Apply Liquid Glass effects to views using `glassEffect(_:in:)`.
+- Apply Liquid Glass to buttons with `.buttonStyle(.glass)`.
+- Use `ToolbarSpacer` to create visual breaks between items in toolbars containing Liquid Glass.
+- Always attach `confirmationDialog()` to the triggering UI element so the Liquid Glass animation morphs from the correct source.
+- `backgroundExtensionEffect()` duplicates, mirrors, and blurs views placed around edges with available safe areas — use for immersive status bar blending.
+- `scrollEdgeEffectStyle(_:for:)` configures the scroll edge effect for scroll views in the Liquid Glass context.
 
 For example, the usage of `+` here is bad and deprecated:
 

@@ -1,4 +1,7 @@
 import SwiftUI
+import os
+
+private let logger = Logger(subsystem: "com.chatapp", category: "MessageList")
 
 // MARK: - Message Metadata
 
@@ -184,6 +187,7 @@ struct MessageListView: View {
             }
         }
         .defaultScrollAnchor(.bottom)
+        .scrollDismissesKeyboard(.interactively)
     }
 
     // MARK: - Top Sentinel (Infinite Scroll)
@@ -254,12 +258,14 @@ struct MessageListView: View {
         // Initial load — also explicitly scroll to bottom as a belt-and-suspenders
         // approach alongside .defaultScrollAnchor(.bottom)
         guard oldLastId != nil else {
+            logger.debug("Initial load, scrolling to bottom")
             shouldAnimateScroll = false
             scrollTarget = Self.bottomAnchorId
             return
         }
 
         if isNearBottom {
+            logger.debug("Auto-scrolling to new message \(newLastId)")
             // Auto-scroll to the new message
             shouldAnimateScroll = true
             scrollTarget = Self.bottomAnchorId

@@ -8,7 +8,9 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  'send-gif': [payload: { gifUrl: string; caption: string }];
+  'send-gif': [
+    payload: { gifUrl: string; caption: string; width: number; height: number },
+  ];
   'send-image': [payload: { file: File; caption: string }];
   close: [];
 }>();
@@ -24,7 +26,12 @@ watch(
   },
 );
 
-function handleGifSend(payload: { gifUrl: string; caption: string }) {
+function handleGifSend(payload: {
+  gifUrl: string;
+  caption: string;
+  width: number;
+  height: number;
+}) {
   emit('send-gif', payload);
 }
 

@@ -14,14 +14,58 @@ final class AuthStore {
 
     private var authListenerTask: Task<Void, Never>?
 
+    private static let cachedUserKey = "cachedUserProfile"
+
     init() {}
+
+    // MARK: - User Profile Cache
+
+    private func cacheUser(_ user: User) {
+        guard let data = try? JSONEncoder().encode(user) else { return }
+        UserDefaults.standard.set(data, forKey: Self.cachedUserKey)
+    }
+
+    private func loadCachedUser() -> User? {
+        guard let data = UserDefaults.standard.data(forKey: Self.cachedUserKey) else { return nil }
+        return try? JSONDecoder().decode(User.self, from: data)
+    }
+
+    private func clearCachedUser() {
+        UserDefaults.standard.removeObject(forKey: Self.cachedUserKey)
+    }
 
     // MARK: - Restore Session
 
     /// Call on app launch to restore a previously authenticated session.
+    /// Uses a cached profile for optimistic UI, then refreshes in the background.
     func initAuth() async {
         loading = true
         error = nil
+
+        // Optimistic: show cached profile immediately if available
+        if let cached = loadCachedUser() {
+            do {
+                if let (_, accessToken) = try await AuthService.shared.restoreSession() {
+                    self.token = accessToken
+                    self.user = cached
+                    await APIClient.shared.setToken(accessToken)
+                    loading = false
+
+                    startAuthListener()
+
+                    // Refresh profile in the background — update if changed, sign out if expired
+                    Task {
+                        await refreshProfile()
+                    }
+                    return
+                }
+            } catch {
+                // Session restore failed — cached profile is stale
+                clearCachedUser()
+            }
+        }
+
+        // No cache or session restore failed — full sequential flow
         defer { loading = false }
 
         do {
@@ -31,11 +75,27 @@ final class AuthStore {
 
                 let fullUser: User = try await APIClient.shared.get(path: "/auth/me")
                 self.user = fullUser
+                cacheUser(fullUser)
 
                 startAuthListener()
             }
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+
+    /// Background refresh of the user profile. Updates the cached user or signs out on failure.
+    private func refreshProfile() async {
+        do {
+            let freshUser: User = try await APIClient.shared.get(path: "/auth/me")
+            self.user = freshUser
+            cacheUser(freshUser)
+        } catch {
+            // Token expired or server rejected — fall back to unauthenticated
+            self.user = nil
+            self.token = nil
+            await APIClient.shared.setToken(nil)
+            clearCachedUser()
         }
     }
 
@@ -55,6 +115,7 @@ final class AuthStore {
 
             let fullUser: User = try await APIClient.shared.get(path: "/auth/me")
             self.user = fullUser
+            cacheUser(fullUser)
 
             startAuthListener()
         } catch {
@@ -78,6 +139,7 @@ final class AuthStore {
 
             let fullUser: User = try await APIClient.shared.get(path: "/auth/me")
             self.user = fullUser
+            cacheUser(fullUser)
 
             startAuthListener()
         } catch {
@@ -99,6 +161,7 @@ final class AuthStore {
         user = nil
         token = nil
         error = nil
+        clearCachedUser()
         await APIClient.shared.setToken(nil)
     }
 
@@ -110,6 +173,7 @@ final class AuthStore {
             path: "/auth/profile", body: request
         )
         self.user = response.user
+        cacheUser(response.user)
     }
 
     func uploadAvatar(imageData: Data, fileName: String) async throws {
@@ -121,12 +185,14 @@ final class AuthStore {
         )
         let fullUser: User = try await APIClient.shared.get(path: "/auth/me")
         self.user = fullUser
+        cacheUser(fullUser)
     }
 
     func deleteAvatar() async throws {
         try await APIClient.shared.delete(path: "/auth/avatar")
         let fullUser: User = try await APIClient.shared.get(path: "/auth/me")
         self.user = fullUser
+        cacheUser(fullUser)
     }
 
     // MARK: - Auth State Listener

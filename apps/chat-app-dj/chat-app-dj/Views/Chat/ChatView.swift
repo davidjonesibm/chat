@@ -10,57 +10,55 @@ struct ChatView: View {
     let channelId: String
     let channelName: String
 
-    @Environment(AuthStore.self) private var authStore
     @Environment(ChatStore.self) private var chatStore
 
     @State private var longPressedMessage: MessageWithSender?
     @State private var emojiPickerMessageId: String?
     @State private var showGiphyPicker = false
     @State private var pendingGifUrl: String?
+    @State private var pendingGifWidth: Int?
+    @State private var pendingGifHeight: Int?
     @State private var selectedMediaURL: IdentifiableURL?
 
     var body: some View {
-        VStack(spacing: 0) {
-            MessageListView(
-                emojiPickerMessageId: emojiPickerMessageId,
-                onReact: { messageId, emoji in
-                    Task { await chatStore.toggleReaction(messageId: messageId, emoji: emoji) }
-                },
-                onLongPress: { message in
-                    longPressedMessage = message
-                    emojiPickerMessageId = message.id
-                },
-                onMediaTap: { url in
-                    selectedMediaURL = IdentifiableURL(url: url)
-                }
-            )
-
-            TypingIndicatorView(typingUsers: chatStore.typingUsers)
-
-            if let gifUrl = pendingGifUrl {
-                GifPreviewBar(gifUrl: gifUrl) {
-                    pendingGifUrl = nil
-                }
+        MessageListView(
+            emojiPickerMessageId: emojiPickerMessageId,
+            onReact: { messageId, emoji in
+                Task { await chatStore.toggleReaction(messageId: messageId, emoji: emoji) }
+            },
+            onLongPress: { message in
+                longPressedMessage = message
+                emojiPickerMessageId = message.id
+            },
+            onMediaTap: { url in
+                selectedMediaURL = IdentifiableURL(url: url)
             }
+        )
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                TypingIndicatorView(typingUsers: chatStore.typingUsers)
 
-            MessageInputBar(
-                channelName: channelName,
-                onSend: handleSend,
-                onStartTyping: { Task { await chatStore.startTyping() } },
-                onStopTyping: { Task { await chatStore.stopTyping() } },
-                onGifTapped: { showGiphyPicker = true },
-                hasPendingAttachment: pendingGifUrl != nil
-            )
-        }
-        .navigationTitle("#\(channelName)")
-        .navigationBarTitleDisplayMode(.inline)
-        .task {
-            guard let token = authStore.token else { return }
-            await chatStore.enterChannel(channelId: channelId, token: token)
+                if let gifUrl = pendingGifUrl {
+                    GifPreviewBar(gifUrl: gifUrl) {
+                        pendingGifUrl = nil
+                    }
+                }
+
+                MessageInputBar(
+                    channelName: channelName,
+                    onSend: handleSend,
+                    onStartTyping: { Task { await chatStore.startTyping() } },
+                    onStopTyping: { Task { await chatStore.stopTyping() } },
+                    onGifTapped: { showGiphyPicker = true },
+                    hasPendingAttachment: pendingGifUrl != nil
+                )
+            }
         }
         .sheet(isPresented: $showGiphyPicker) {
-            GiphyPickerView { gifUrl in
+            GiphyPickerView { gifUrl, width, height in
                 pendingGifUrl = gifUrl
+                pendingGifWidth = width
+                pendingGifHeight = height
                 showGiphyPicker = false
             }
             .presentationDetents([.medium, .large])
@@ -126,8 +124,10 @@ struct ChatView: View {
         Task {
             await chatStore.stopTyping()
             if let gifUrl = pendingGifUrl {
-                await chatStore.sendMessage(content: text, type: .giphy, gifUrl: gifUrl)
+                await chatStore.sendMessage(content: text, type: .giphy, gifUrl: gifUrl, imageWidth: pendingGifWidth, imageHeight: pendingGifHeight)
                 pendingGifUrl = nil
+                pendingGifWidth = nil
+                pendingGifHeight = nil
             } else {
                 await chatStore.sendMessage(content: text)
             }
@@ -139,6 +139,5 @@ struct ChatView: View {
     NavigationStack {
         ChatView(channelId: "preview-channel", channelName: "general")
     }
-    .environment(AuthStore())
     .environment(ChatStore())
 }

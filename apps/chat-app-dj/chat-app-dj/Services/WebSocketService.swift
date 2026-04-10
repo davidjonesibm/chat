@@ -128,25 +128,6 @@ actor WebSocketService {
         webSocketTask = task
         task.resume()
 
-        // Verify the handshake by sending a ping and awaiting the pong
-        do {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                task.sendPing { error in
-                    if let error {
-                        continuation.resume(throwing: error)
-                    } else {
-                        continuation.resume()
-                    }
-                }
-            }
-        } catch {
-            logger.error("WebSocket handshake failed: \(error.localizedDescription)")
-            task.cancel(with: .goingAway, reason: nil)
-            webSocketTask = nil
-            setState(.disconnected)
-            throw error
-        }
-
         socketStream = SocketStream(task: task)
         setState(.connected)
         reconnectAttempts = 0
@@ -236,15 +217,16 @@ actor WebSocketService {
                     }
 
                     // Stream ended — trigger reconnect only if we were still connected
+                    // and the consumer didn't cancel (e.g. channel switch)
                     let currentState = await self.state
-                    if currentState == .connected {
+                    if currentState == .connected && !Task.isCancelled {
                         await self.logger.info("WebSocket stream ended. Attempting reconnect…")
                         await self.scheduleReconnect()
                     }
                     continuation.finish()
                 } catch {
                     let currentState = await self.state
-                    if currentState == .connected {
+                    if currentState == .connected && !(error is CancellationError) && !Task.isCancelled {
                         await self.logger.error("WebSocket stream error: \(error.localizedDescription). Attempting reconnect…")
                         await self.scheduleReconnect()
                     }

@@ -28,6 +28,8 @@ nonisolated struct MessageWithSender: Codable, Identifiable, Equatable, Sendable
     let type: MessageType
     let gifUrl: String?
     let imageUrl: String?
+    let imageWidth: Int?
+    let imageHeight: Int?
     let createdAt: String
     let updatedAt: String
     var reactions: [ReactionSummary]?
@@ -36,6 +38,8 @@ nonisolated struct MessageWithSender: Codable, Identifiable, Equatable, Sendable
         case id, seq, content, channel, sender, type, reactions
         case gifUrl = "gif_url"
         case imageUrl = "image_url"
+        case imageWidth = "image_width"
+        case imageHeight = "image_height"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }

@@ -183,7 +183,9 @@ export type Database = {
           created_at: string;
           gif_url: string | null;
           id: string;
+          image_height: number | null;
           image_url: string | null;
+          image_width: number | null;
           search_vector: unknown;
           sender_id: string | null;
           seq: number;
@@ -196,7 +198,9 @@ export type Database = {
           created_at?: string;
           gif_url?: string | null;
           id?: string;
+          image_height?: number | null;
           image_url?: string | null;
+          image_width?: number | null;
           search_vector?: unknown;
           sender_id?: string | null;
           seq?: never;
@@ -209,7 +213,9 @@ export type Database = {
           created_at?: string;
           gif_url?: string | null;
           id?: string;
+          image_height?: number | null;
           image_url?: string | null;
+          image_width?: number | null;
           search_vector?: unknown;
           sender_id?: string | null;
           seq?: never;

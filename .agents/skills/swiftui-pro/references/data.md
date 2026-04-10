@@ -25,6 +25,16 @@ These rules help ensure code is efficient and works well in the long term.
 - Prefer to make structs conform to `Identifiable` rather than using `id: \.someProperty` in SwiftUI code.
 - Never attempt to use `@AppStorage` inside an `@Observable` class, even if marked `@ObservationIgnored` – it will _not_ trigger view updates when a change happens.
 
+## Container values
+
+- When building custom container views, define custom metadata using `ContainerValueKey` and pass it from child to parent with the `containerValue(_:_:)` modifier.
+- The `@Entry` macro works for `ContainerValues` in the same way it does for `EnvironmentValues`, replacing manual key boilerplate.
+
+## Previews
+
+- Use `@Previewable` inside `#Preview` to create inline dynamic properties (e.g. `@Previewable @State var score = 0`) without needing a separate wrapper view.
+- Use `PreviewModifier` to inject shared dependencies (environment objects, model containers) into previews without repeating setup in every preview block.
+
 ## SwiftData
 
 - If you only need the number of items matching a query, consider `ModelContext.fetchCount()` with a fetch descriptor. This will _not_ live update if the data changes unless something else triggers the update, such as `@Query`, so it should be used carefully.

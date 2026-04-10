@@ -10,7 +10,7 @@ final class Router {
 
     enum Destination: Hashable {
         case groups
-        case group(groupId: String)
+        case group(groupId: String, groupName: String)
         case channel(groupId: String, channelId: String)
         case invite(token: String)
     }

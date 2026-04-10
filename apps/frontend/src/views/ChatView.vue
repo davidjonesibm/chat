@@ -114,8 +114,18 @@ function handleToggleMedia() {
   showMediaSheet.value = !showMediaSheet.value;
 }
 
-function handleGifSend(payload: { gifUrl: string; caption: string }) {
-  sendGiphyMessage(payload.gifUrl, payload.caption);
+function handleGifSend(payload: {
+  gifUrl: string;
+  caption: string;
+  width: number;
+  height: number;
+}) {
+  sendGiphyMessage(
+    payload.gifUrl,
+    payload.caption,
+    payload.width,
+    payload.height,
+  );
   showMediaSheet.value = false;
 }
 
@@ -129,12 +139,16 @@ async function handleImageSend(payload: { file: File; caption: string }) {
     formData.append('file', payload.file);
 
     const baseUrl = import.meta.env.VITE_API_URL || window.location.origin;
-    const { url } = await apiFetch<{ url: string }>(`${baseUrl}/api/images`, {
+    const { url, width, height } = await apiFetch<{
+      url: string;
+      width?: number;
+      height?: number;
+    }>(`${baseUrl}/api/images`, {
       method: 'POST',
       body: formData,
     });
 
-    sendImageMessage(url, payload.caption);
+    sendImageMessage(url, payload.caption, width, height);
     showMediaSheet.value = false;
   } catch (err) {
     console.error('[ChatView] Image upload failed:', err);

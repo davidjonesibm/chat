@@ -11,7 +11,6 @@ import {
 import { storeToRefs } from 'pinia';
 import { useChatStore } from '../../stores/chatStore';
 import { useChannelStore } from '../../stores/channelStore';
-import { useAuthStore } from '../../stores/authStore';
 import { useChat } from '../../composables/useChat';
 import { useMessageActions } from '../../composables/useMessageActions';
 import Message from './Message.vue';
@@ -19,7 +18,6 @@ import MessageActionSheet from './MessageActionSheet.vue';
 
 const chatStore = useChatStore();
 const channelStore = useChannelStore();
-const authStore = useAuthStore();
 const { toggleReaction } = useChat();
 const {
   activeMessage,
@@ -43,7 +41,6 @@ const {
   highlightedMessageId,
 } = storeToRefs(chatStore);
 const { currentChannelId } = storeToRefs(channelStore);
-const { user } = storeToRefs(authStore);
 
 const scrollContainer = useTemplateRef<HTMLElement>('scrollContainer');
 const topSentinel = useTemplateRef<HTMLElement>('topSentinel');
@@ -116,7 +113,11 @@ const typingText = computed(() => {
 });
 
 let topObserver: IntersectionObserver | null = null;
+let resizeObserver: ResizeObserver | null = null;
 let previousMessageCount = 0;
+let awaitingChannelSwitch = false;
+let recentlyScrolledToBottom = false;
+let resizeScrollTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Check if user is near bottom of scroll container
 function updateNearBottomStatus() {
@@ -144,6 +145,13 @@ function scrollToBottom(smooth = true) {
   });
 
   chatStore.unreadCount = 0;
+
+  // Signal ResizeObserver to re-scroll if content grows (e.g. images loading)
+  recentlyScrolledToBottom = true;
+  if (resizeScrollTimer) clearTimeout(resizeScrollTimer);
+  resizeScrollTimer = setTimeout(() => {
+    recentlyScrolledToBottom = false;
+  }, 1500);
 }
 
 // Handle scroll event
@@ -196,19 +204,33 @@ function setupInfiniteScroll() {
 }
 
 // Watch for new messages and handle auto-scroll
+// Source is the array reference itself (shallowRef), so it fires on every
+// setMessages call — even when the old and new arrays have the same length.
 watch(
-  () => messages.value.length,
-  async (newCount, oldCount) => {
-    // Skip initial load
-    if (oldCount === 0 && newCount > 0) {
+  () => messages.value,
+  async (newMessages) => {
+    const newCount = newMessages.length;
+
+    // Channel switch — messages were replaced with new channel's batch
+    if (awaitingChannelSwitch) {
+      awaitingChannelSwitch = false;
+      previousMessageCount = newCount;
+      await nextTick();
+      scrollToBottom(false); // Instant scroll on channel switch
+      return;
+    }
+
+    // Initial load (mount — no channel switch flag, but previous count is 0)
+    if (previousMessageCount === 0 && newCount > 0) {
       previousMessageCount = newCount;
       await nextTick();
       scrollToBottom(false); // Instant scroll on initial load
       return;
     }
 
-    // New messages arrived
+    // New messages arrived (live or fetch)
     if (newCount > previousMessageCount) {
+      const added = newCount - previousMessageCount;
       previousMessageCount = newCount;
 
       if (isNearBottom.value) {
@@ -217,11 +239,10 @@ watch(
         scrollToBottom(true);
       } else if (!isPrepending.value) {
         // Increment unread count if user is scrolled up (skip historical prepends)
-        const newMessagesCount = newCount - oldCount;
-        chatStore.unreadCount += newMessagesCount;
+        chatStore.unreadCount += added;
       }
     } else {
-      // Messages decreased (channel changed or cleared)
+      // Messages decreased or stayed the same (e.g. deletion)
       previousMessageCount = newCount;
     }
   },
@@ -240,15 +261,14 @@ watch(highlightedMessageId, async (messageId) => {
   chatStore.highlightedMessageId = null;
 });
 
-// Watch for channel changes and scroll to bottom
-watch(currentChannelId, async () => {
+// Watch for channel changes — set flag so the messages watcher scrolls
+// after the new channel's messages are actually loaded.
+watch(currentChannelId, () => {
   if (currentChannelId.value) {
     previousMessageCount = 0;
     chatStore.unreadCount = 0;
     isNearBottom.value = true;
-
-    await nextTick();
-    scrollToBottom(false);
+    awaitingChannelSwitch = true;
   }
 });
 
@@ -256,6 +276,20 @@ watch(currentChannelId, async () => {
 onMounted(() => {
   setupInfiniteScroll();
   previousMessageCount = messages.value.length;
+
+  // ResizeObserver: re-scroll when content grows shortly after scrollToBottom
+  if (scrollContainer.value) {
+    resizeObserver = new ResizeObserver(() => {
+      if (isPrepending.value) return;
+      if (!recentlyScrolledToBottom) return;
+      if (!scrollContainer.value) return;
+      scrollContainer.value.scrollTo({
+        top: scrollContainer.value.scrollHeight,
+        behavior: 'auto',
+      });
+    });
+    resizeObserver.observe(scrollContainer.value);
+  }
 
   // Scroll to bottom on initial mount
   nextTick(() => {
@@ -273,6 +307,14 @@ onUnmounted(() => {
   if (topObserver) {
     topObserver.disconnect();
     topObserver = null;
+  }
+  if (resizeObserver) {
+    resizeObserver.disconnect();
+    resizeObserver = null;
+  }
+  if (resizeScrollTimer) {
+    clearTimeout(resizeScrollTimer);
+    resizeScrollTimer = null;
   }
 });
 </script>

@@ -5,13 +5,12 @@ struct ChannelListView: View {
     let groupName: String
 
     @Environment(ChannelStore.self) private var channelStore
-    @Environment(Router.self) private var router
 
     @State private var showCreateChannel = false
 
     var body: some View {
         Group {
-            if channelStore.loading && channelStore.channels.isEmpty {
+            if channelStore.currentGroupId != groupId || (channelStore.channels.isEmpty && (channelStore.loading || !channelStore.hasAttemptedFetch)) {
                 ProgressView("Loading channels…")
             } else if let error = channelStore.error, channelStore.channels.isEmpty {
                 ContentUnavailableView {
@@ -31,9 +30,7 @@ struct ChannelListView: View {
                 )
             } else {
                 List(channelStore.channels) { channel in
-                    Button {
-                        router.navigate(to: .channel(groupId: groupId, channelId: channel.id))
-                    } label: {
+                    NavigationLink(value: Router.Destination.channel(groupId: groupId, channelId: channel.id)) {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack {
                                 Text("# \(channel.name)")
@@ -58,10 +55,9 @@ struct ChannelListView: View {
                             }
                         }
                     }
-                    .tint(.primary)
                 }
                 .refreshable {
-                    await channelStore.fetchChannels(groupId: groupId)
+                    await channelStore.fetchChannels(groupId: groupId, force: true)
                 }
             }
         }

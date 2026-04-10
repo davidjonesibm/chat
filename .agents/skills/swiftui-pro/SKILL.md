@@ -94,10 +94,15 @@ End of example.
 
 ## References
 
-- `references/accessibility.md` - Dynamic Type, VoiceOver, Reduce Motion, and other accessibility requirements.
-- `references/api.md` - updating code for modern API, and the deprecated code it replaces.
-- `references/design.md` - guidance for building accessible apps that meet Apple’s Human Interface Guidelines.
-- `references/hygiene.md` - making code compile cleanly and be maintainable in the long term.
+- `references/accessibility.md` - Dynamic Type, VoiceOver, Reduce Motion, Assistive Access, and other accessibility requirements.
+- `references/api.md` - Updating code for modern API (including Liquid Glass, navigation transitions, gestures), and the deprecated code it replaces.
+- `references/data.md` - Data flow, `@Observable`, `@State`, bindings, container values, SwiftData, and preview patterns.
+- `references/design.md` - Guidance for building accessible apps with Liquid Glass, MeshGradient, symbol effects, and Apple's Human Interface Guidelines.
+- `references/hygiene.md` - Making code compile cleanly and be maintainable in the long term.
+- `references/navigation.md` - NavigationStack, NavigationSplitView, tab customization, navigation transitions, sheets, and alerts.
+- `references/performance.md` - View identity, scroll performance, GPU rendering, and avoiding unnecessary recomputation.
+- `references/swift.md` - Modern Swift patterns, string handling, concurrency, and language idioms.
+- `references/views.md` - View composition, custom container views, animations, previews, and slider/text editor patterns.
 - `references/navigation.md` - navigation using `NavigationStack`/`NavigationSplitView`, plus alerts, confirmation dialogs, and sheets.
 - `references/performance.md` - optimizing SwiftUI code for maximum performance.
 - `references/data.md` - data flow, shared state, and property wrappers.

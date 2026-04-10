@@ -5,7 +5,7 @@ import os
 private let logger = Logger(subsystem: "com.chatapp", category: "giphy")
 
 struct GiphyPickerView: View {
-    let onGifSelected: (String) -> Void
+    let onGifSelected: (String, Int?, Int?) -> Void
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -13,7 +13,17 @@ struct GiphyPickerView: View {
             .onSelectMedia { media, contentType in
                 let gifURL = media.url(rendition: .fixedWidth, fileType: .gif)
                     ?? "https://media.giphy.com/media/\(media.id)/giphy.gif"
-                onGifSelected(gifURL)
+                let gifWidth: Int?
+                let gifHeight: Int?
+                let ar = media.aspectRatio
+                if ar > 0 {
+                    gifWidth = 200
+                    gifHeight = Int(round(200.0 / ar))
+                } else {
+                    gifWidth = nil
+                    gifHeight = nil
+                }
+                onGifSelected(gifURL, gifWidth, gifHeight)
                 dismiss()
             }
             .onDismiss {

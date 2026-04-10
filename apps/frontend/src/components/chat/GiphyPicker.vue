@@ -12,7 +12,9 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  send: [payload: { gifUrl: string; caption: string }];
+  send: [
+    payload: { gifUrl: string; caption: string; width: number; height: number },
+  ];
   close: [];
 }>();
 
@@ -92,9 +94,12 @@ function handleBack() {
 
 function handleSend() {
   if (!selectedGif.value) return;
+  const rendition = selectedGif.value.images.fixed_height;
   emit('send', {
-    gifUrl: selectedGif.value.images.fixed_height.url,
+    gifUrl: rendition.url,
     caption: caption.value.trim(),
+    width: parseInt(String(rendition.width), 10) || 0,
+    height: parseInt(String(rendition.height), 10) || 0,
   });
   selectedGif.value = null;
   caption.value = '';

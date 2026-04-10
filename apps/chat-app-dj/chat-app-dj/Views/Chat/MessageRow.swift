@@ -128,7 +128,7 @@ struct MessageRow: View {
     // MARK: - Giphy Content
 
     private var giphyContent: some View {
-        GiphyContentView(gifUrl: message.gifUrl, content: message.content, onMediaTap: onMediaTap)
+        GiphyContentView(gifUrl: message.gifUrl, content: message.content, imageWidth: message.imageWidth, imageHeight: message.imageHeight, onMediaTap: onMediaTap)
     }
 
     /// Extracts the GIPHY media ID from URLs like
@@ -146,7 +146,7 @@ struct MessageRow: View {
     // MARK: - Image Content
 
     private var imageContent: some View {
-        ImageContentView(imageUrl: message.imageUrl, content: message.content, onMediaTap: onMediaTap)
+        ImageContentView(imageUrl: message.imageUrl, content: message.content, imageWidth: message.imageWidth, imageHeight: message.imageHeight, onMediaTap: onMediaTap)
     }
 
     // MARK: - Reactions Row
@@ -256,14 +256,23 @@ private struct MessageReactionsRow: View {
 private struct GiphyContentView: View {
     let gifUrl: String?
     let content: String
+    let imageWidth: Int?
+    let imageHeight: Int?
     let onMediaTap: (URL) -> Void
+
+    private var mediaSize: CGSize {
+        if let w = imageWidth, let h = imageHeight, w > 0, h > 0 {
+            return CGSize(width: 250, height: 250.0 * CGFloat(h) / CGFloat(w))
+        }
+        return CGSize(width: 250, height: 180)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             if let gifUrl,
                let mediaId = MessageRow.extractGiphyMediaId(from: gifUrl) {
                 GiphyAnimatedView(mediaId: mediaId)
-                    .frame(width: 250, height: 180)
+                    .frame(width: mediaSize.width, height: mediaSize.height)
                     .clipShape(.rect(cornerRadius: 8))
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -279,7 +288,7 @@ private struct GiphyContentView: View {
                         image
                             .resizable()
                             .scaledToFill()
-                            .frame(width: 250, height: 180)
+                            .frame(width: mediaSize.width, height: mediaSize.height)
                             .clipped()
                     case .failure:
                         mediaThumbnailPlaceholder(label: "Failed to load GIF")
@@ -290,7 +299,7 @@ private struct GiphyContentView: View {
                         mediaThumbnailPlaceholder(label: "GIF")
                     }
                 }
-                .frame(width: 250, height: 180)
+                .frame(width: mediaSize.width, height: mediaSize.height)
                 .clipShape(.rect(cornerRadius: 8))
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -310,7 +319,7 @@ private struct GiphyContentView: View {
     private func mediaThumbnailPlaceholder(label: String) -> some View {
         RoundedRectangle(cornerRadius: 8)
             .fill(Color(.systemGray5))
-            .frame(width: 250, height: 180)
+            .frame(width: mediaSize.width, height: mediaSize.height)
             .overlay {
                 Text(label)
                     .font(.caption)
@@ -324,7 +333,16 @@ private struct GiphyContentView: View {
 private struct ImageContentView: View {
     let imageUrl: String?
     let content: String
+    let imageWidth: Int?
+    let imageHeight: Int?
     let onMediaTap: (URL) -> Void
+
+    private var mediaSize: CGSize {
+        if let w = imageWidth, let h = imageHeight, w > 0, h > 0 {
+            return CGSize(width: 250, height: 250.0 * CGFloat(h) / CGFloat(w))
+        }
+        return CGSize(width: 250, height: 180)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -335,7 +353,7 @@ private struct ImageContentView: View {
                         image
                             .resizable()
                             .scaledToFill()
-                            .frame(width: 250, height: 180)
+                            .frame(width: mediaSize.width, height: mediaSize.height)
                             .clipped()
                     case .failure:
                         mediaThumbnailPlaceholder(label: "Failed to load image")
@@ -346,7 +364,7 @@ private struct ImageContentView: View {
                         mediaThumbnailPlaceholder(label: "Image")
                     }
                 }
-                .frame(width: 250, height: 180)
+                .frame(width: mediaSize.width, height: mediaSize.height)
                 .clipShape(.rect(cornerRadius: 8))
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -373,7 +391,7 @@ private struct ImageContentView: View {
     private func mediaThumbnailPlaceholder(label: String) -> some View {
         RoundedRectangle(cornerRadius: 8)
             .fill(Color(.systemGray5))
-            .frame(width: 250, height: 180)
+            .frame(width: mediaSize.width, height: mediaSize.height)
             .overlay {
                 Text(label)
                     .font(.caption)
@@ -536,6 +554,8 @@ struct FlowLayout: Layout {
             type: .text,
             gifUrl: nil,
             imageUrl: nil,
+            imageWidth: nil,
+            imageHeight: nil,
             createdAt: ISO8601DateFormatter().string(from: .now),
             updatedAt: ISO8601DateFormatter().string(from: .now),
             reactions: [
@@ -563,6 +583,8 @@ struct FlowLayout: Layout {
             type: .text,
             gifUrl: nil,
             imageUrl: nil,
+            imageWidth: nil,
+            imageHeight: nil,
             createdAt: ISO8601DateFormatter().string(from: .now),
             updatedAt: ISO8601DateFormatter().string(from: .now),
             reactions: nil
@@ -587,6 +609,8 @@ struct FlowLayout: Layout {
             type: .system,
             gifUrl: nil,
             imageUrl: nil,
+            imageWidth: nil,
+            imageHeight: nil,
             createdAt: ISO8601DateFormatter().string(from: .now),
             updatedAt: ISO8601DateFormatter().string(from: .now),
             reactions: nil

@@ -10,23 +10,8 @@ struct UserAvatarView: View {
 
     var body: some View {
         if let urlString = resolvedAvatarURL, let url = URL(string: urlString) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    initialsCircle
-                case .empty:
-                    initialsCircle
-                        .overlay {
-                            ProgressView()
-                                .scaleEffect(size > 30 ? 0.6 : 0.4)
-                        }
-                @unknown default:
-                    initialsCircle
-                }
+            CachedAsyncImage(url: url) {
+                initialsCircle
             }
             .frame(width: size, height: size)
             .clipShape(Circle())

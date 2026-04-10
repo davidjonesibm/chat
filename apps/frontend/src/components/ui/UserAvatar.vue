@@ -76,9 +76,8 @@ const textSize = computed(() => {
         v-if="showImg"
         :src="resolvedUrl"
         :alt="`${username}'s avatar`"
-        loading="lazy"
         decoding="async"
-        class="rounded-full"
+        class="w-full h-full object-cover rounded-full"
         @error="handleImgError"
       />
       <div

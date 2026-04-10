@@ -473,6 +473,8 @@ async function handleMessageSend(
       type: payloadType,
       gif_url,
       image_url,
+      image_width,
+      image_height,
     } = payload;
 
     // Determine message type
@@ -591,6 +593,14 @@ async function handleMessageSend(
         type: messageType,
         gif_url: messageType === 'giphy' ? gif_url! : null,
         image_url: messageType === 'image' ? image_url! : null,
+        image_width:
+          (messageType === 'image' || messageType === 'giphy') && image_width
+            ? image_width
+            : null,
+        image_height:
+          (messageType === 'image' || messageType === 'giphy') && image_height
+            ? image_height
+            : null,
       })
       .select('*')
       .single();
@@ -631,6 +641,14 @@ async function handleMessageSend(
           type: messageType,
           gif_url: messageType === 'giphy' ? gif_url : undefined,
           image_url: messageType === 'image' ? image_url : undefined,
+          image_width:
+            messageType === 'image' || messageType === 'giphy'
+              ? (image_width ?? undefined)
+              : undefined,
+          image_height:
+            messageType === 'image' || messageType === 'giphy'
+              ? (image_height ?? undefined)
+              : undefined,
           seq: message.seq,
           created_at: message.created_at,
           updated_at: message.updated_at,

@@ -30,6 +30,7 @@ const emit = defineEmits<{
   'open-actions': [message: MessageWithSender];
 }>();
 
+const loadedImages = ref(new Set<string>());
 const hovered = ref(false);
 const touched = ref(false);
 const desktopFullPickerOpen = ref(false);
@@ -148,6 +149,17 @@ function onInlinePickerClose() {
   inlinePickerOpen.value = false;
 }
 
+function handleImageLoad(messageId: string) {
+  loadedImages.value.add(messageId);
+}
+
+function imageAspectRatio(msg: MessageWithSender): string {
+  if (msg.image_width && msg.image_height) {
+    return `${msg.image_width}/${msg.image_height}`;
+  }
+  return '4/3';
+}
+
 function onContextMenu(e: Event) {
   if (isMobile.value) e.preventDefault();
 }
@@ -222,13 +234,23 @@ watch(isMobile, () => {
 
           <!-- Giphy message -->
           <div v-if="message.type === 'giphy'">
-            <img
-              :src="message.gif_url"
-              :alt="message.content || 'GIF'"
-              loading="lazy"
-              referrerpolicy="no-referrer"
-              class="rounded-lg max-w-[300px]"
-            />
+            <div
+              class="max-w-[300px] relative"
+              :style="{ aspectRatio: imageAspectRatio(message) }"
+            >
+              <div
+                v-if="!loadedImages.has(message.id)"
+                class="skeleton w-full h-full rounded-lg"
+              />
+              <img
+                :src="message.gif_url"
+                :alt="message.content || 'GIF'"
+                referrerpolicy="no-referrer"
+                class="rounded-lg w-full h-full object-contain"
+                :class="{ hidden: !loadedImages.has(message.id) }"
+                @load="handleImageLoad(message.id)"
+              />
+            </div>
             <p
               v-if="message.content"
               class="text-sm text-base-content leading-relaxed mt-1"
@@ -239,12 +261,22 @@ watch(isMobile, () => {
 
           <!-- Image message -->
           <div v-else-if="message.type === 'image'">
-            <img
-              :src="toStorageUrl(message.image_url)"
-              :alt="message.content || 'Shared image'"
-              loading="lazy"
-              class="rounded-lg max-w-[300px] cursor-pointer"
-            />
+            <div
+              class="max-w-[300px] relative"
+              :style="{ aspectRatio: imageAspectRatio(message) }"
+            >
+              <div
+                v-if="!loadedImages.has(message.id)"
+                class="skeleton w-full h-full rounded-lg"
+              />
+              <img
+                :src="toStorageUrl(message.image_url)"
+                :alt="message.content || 'Shared image'"
+                class="rounded-lg w-full h-full object-contain cursor-pointer"
+                :class="{ hidden: !loadedImages.has(message.id) }"
+                @load="handleImageLoad(message.id)"
+              />
+            </div>
             <p
               v-if="message.content"
               class="text-sm text-base-content leading-relaxed mt-1"

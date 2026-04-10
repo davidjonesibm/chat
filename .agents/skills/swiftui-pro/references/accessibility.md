@@ -11,3 +11,6 @@
 - The same is true of `Menu`: using `Menu("Options", systemImage: "ellipsis.circle") { }` is much better than just using an image.
 - Never use `onTapGesture()` unless you specifically need tap location or tap count. All other tappable elements should be a `Button`.
 - If `onTapGesture()` must be used, make sure to add `.accessibilityAddTraits(.isButton)` or similar so it can be read by VoiceOver correctly.
+- When building a custom tab-like interface, apply `.accessibilityAddTraits(.isTabBar)` so VoiceOver correctly announces the element as a tab bar.
+- When programmatically generating accessibility descriptions for colors, use the `accessibilityName:` interpolation: `"\(accessibilityName: myColor)"`. This provides a localized, human-readable color name for VoiceOver without manual string mapping.
+- When targeting iOS 26 and later, use `AssistiveAccess` to support Assistive Access mode in your scenes, ensuring the app remains usable in the simplified UI.

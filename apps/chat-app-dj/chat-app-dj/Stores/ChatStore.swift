@@ -1,5 +1,6 @@
 import Foundation
 import os
+import UIKit
 
 @Observable
 @MainActor
@@ -27,9 +28,32 @@ final class ChatStore {
     // MARK: - Enter / Leave Channel
 
     func enterChannel(channelId: String, token: String) async {
-        // Leave any existing channel first
-        if currentChannelId != nil {
-            await leaveChannel()
+        // Same channel — retry message fetch only if it was cancelled/failed
+        if channelId == currentChannelId {
+            if messages.isEmpty {
+                await fetchMessages()
+            }
+            return
+        }
+
+        // If already in a channel, do a lightweight switch (reuse WS connection)
+        if let oldChannelId = currentChannelId {
+            logger.info("Switching from channel \(oldChannelId) to \(channelId)")
+
+            messageListenerTask?.cancel()
+            messageListenerTask = nil
+
+            do {
+                try await webSocketService.send(.channelLeave(.init(channelId: oldChannelId)))
+            } catch {
+                logger.error("Failed to send channel:leave — \(error.localizedDescription)")
+            }
+
+            messages = []
+            typingUsers = []
+            onlineUsers = []
+            nextCursor = nil
+            hasMore = true
         }
 
         currentChannelId = channelId
@@ -38,14 +62,23 @@ final class ChatStore {
 
         logger.info("Entering channel \(channelId)")
 
-        // Run WS connect+join and message fetch concurrently.
-        // Messages come from HTTP; live updates come from WS — they're independent.
-        async let wsReady: Void = connectAndJoinWebSocket(channelId: channelId, token: token)
-        async let messagesFetched: Void = fetchMessages()
-
-        // Await messages first so loading clears as soon as they arrive
-        await messagesFetched
-        await wsReady
+        let wsState = await webSocketService.state
+        if wsState == .connected {
+            // Reuse existing connection — just join the new channel
+            do {
+                try await webSocketService.send(.channelJoin(.init(channelId: channelId)))
+            } catch {
+                logger.error("Failed to send channel:join — \(error.localizedDescription)")
+            }
+            listenForMessages()
+            await fetchMessages()
+        } else {
+            // No active connection — connect, join, and fetch concurrently
+            async let wsReady: Void = connectAndJoinWebSocket(channelId: channelId, token: token)
+            async let messagesFetched: Void = fetchMessages()
+            await messagesFetched
+            await wsReady
+        }
     }
 
     /// Connects the WebSocket, sends channel:join, and starts listening for live messages.
@@ -100,7 +133,9 @@ final class ChatStore {
         content: String,
         type: MessageType = .text,
         gifUrl: String? = nil,
-        imageUrl: String? = nil
+        imageUrl: String? = nil,
+        imageWidth: Int? = nil,
+        imageHeight: Int? = nil
     ) async {
         guard let channelId = currentChannelId else { return }
 
@@ -111,7 +146,9 @@ final class ChatStore {
                     content: content,
                     type: type,
                     gifUrl: gifUrl,
-                    imageUrl: imageUrl
+                    imageUrl: imageUrl,
+                    imageWidth: imageWidth,
+                    imageHeight: imageHeight
                 ))
             )
         } catch {
@@ -140,6 +177,8 @@ final class ChatStore {
             hasMore = response.hasMore
 
             logger.info("Fetched \(response.items.count) messages for channel \(channelId)")
+
+            preloadAvatars(from: messages)
         } catch {
             logger.error("Failed to fetch messages — \(error.localizedDescription)")
             self.error = "Failed to load messages."
@@ -178,6 +217,8 @@ final class ChatStore {
             hasMore = response.hasMore
 
             logger.info("Fetched \(response.items.count) more messages for channel \(channelId)")
+
+            preloadAvatars(from: deduped)
         } catch {
             logger.error("Failed to fetch more messages — \(error.localizedDescription)")
             self.error = "Failed to load more messages."
@@ -274,6 +315,24 @@ final class ChatStore {
             if !Task.isCancelled {
                 logger.error("Message stream error: \(error.localizedDescription)")
             }
+        }
+    }
+
+    // MARK: - Avatar Preloading
+
+    /// Resolves an avatar string (absolute or relative path) to a full URL.
+    private func resolveAvatarURL(_ avatar: String?) -> URL? {
+        guard let avatar, !avatar.isEmpty else { return nil }
+        let urlString = avatar.hasPrefix("http") ? avatar : Config.supabaseURL + avatar
+        return URL(string: urlString)
+    }
+
+    /// Fire-and-forget preload of avatar images from a batch of messages.
+    private func preloadAvatars(from messages: [MessageWithSender]) {
+        let urls = messages.compactMap { resolveAvatarURL($0.sender.avatar) }
+        guard !urls.isEmpty else { return }
+        Task.detached {
+            await ImageCache.shared.preload(urls: urls)
         }
     }
 

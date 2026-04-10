@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest } from 'fastify';
 import { randomUUID } from 'node:crypto';
+import imageSize from 'image-size';
 
 function requireUser(request: FastifyRequest) {
   if (!request.user)
@@ -79,6 +80,14 @@ export default async function (fastify: FastifyInstance) {
       // Consume the file stream into a buffer
       const buffer = await file.toBuffer();
 
+      // Extract image dimensions
+      let dimensions: { width?: number; height?: number } = {};
+      try {
+        dimensions = imageSize(buffer);
+      } catch (err) {
+        fastify.log.warn({ err }, 'Failed to extract image dimensions');
+      }
+
       const ext = MIME_TO_EXT[file.mimetype];
       const storagePath = `${user.id}/${channelId}/${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
 
@@ -102,7 +111,11 @@ export default async function (fastify: FastifyInstance) {
         .getPublicUrl(storagePath);
 
       reply.code(201);
-      return { url: publicUrl };
+      return {
+        url: publicUrl,
+        width: dimensions.width ?? null,
+        height: dimensions.height ?? null,
+      };
     },
   );
 }

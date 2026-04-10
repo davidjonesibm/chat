@@ -16,11 +16,15 @@ enum ClientMessage: Codable, Sendable {
         let type: MessageType?
         let gifUrl: String?
         let imageUrl: String?
+        var imageWidth: Int?
+        var imageHeight: Int?
 
         enum CodingKeys: String, CodingKey {
             case channelId, content, type
             case gifUrl = "gif_url"
             case imageUrl = "image_url"
+            case imageWidth = "image_width"
+            case imageHeight = "image_height"
         }
     }
 

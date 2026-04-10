@@ -9,6 +9,8 @@ export interface MessageSendPayload {
   type?: 'text' | 'giphy' | 'image';
   gif_url?: string;
   image_url?: string;
+  image_width?: number;
+  image_height?: number;
 }
 
 export interface MessageNewPayload {

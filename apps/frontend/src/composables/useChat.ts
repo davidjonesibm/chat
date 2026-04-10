@@ -319,7 +319,12 @@ export function useChat() {
     });
   }
 
-  function sendGiphyMessage(gifUrl: string, caption: string) {
+  function sendGiphyMessage(
+    gifUrl: string,
+    caption: string,
+    width?: number,
+    height?: number,
+  ) {
     const channelId = chatStore.currentChannelId;
     if (!channelId) return;
 
@@ -335,13 +340,20 @@ export function useChat() {
         content: caption,
         type: 'giphy',
         gif_url: gifUrl,
+        image_width: width,
+        image_height: height,
       },
     };
 
     ws.send(JSON.stringify(message));
   }
 
-  function sendImageMessage(imageUrl: string, caption: string) {
+  function sendImageMessage(
+    imageUrl: string,
+    caption: string,
+    width?: number,
+    height?: number,
+  ) {
     const channelId = chatStore.currentChannelId;
     if (!channelId) return;
 
@@ -357,6 +369,8 @@ export function useChat() {
         content: caption,
         type: 'image',
         image_url: imageUrl,
+        image_width: width,
+        image_height: height,
       },
     };
 
