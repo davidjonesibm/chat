@@ -23,9 +23,11 @@ struct MessageListView: View {
     // MARK: - Environment
 
     @Environment(ChatStore.self) private var chatStore
+    @Environment(AuthStore.self) private var authStore
 
     // MARK: - Callbacks
 
+    let isInputFocused: Bool
     let emojiPickerMessageId: String?
     let onReact: (String, String) -> Void        // (messageId, emoji)
     let onLongPress: (MessageWithSender) -> Void
@@ -134,15 +136,17 @@ struct MessageListView: View {
                 .scrollNearBottomTracking($isNearBottom)
                 .onChange(of: scrollTarget) { _, target in
                     guard let target else { return }
-                    if shouldAnimateScroll {
-                        withAnimation(.easeOut(duration: 0.3)) {
-                            proxy.scrollTo(target, anchor: .bottom)
-                        }
-                    } else {
-                        proxy.scrollTo(target, anchor: .bottom)
-                    }
+                    proxy.scrollTo(target, anchor: .bottom)
                     scrollTarget = nil
                     shouldAnimateScroll = false
+                }
+                .onChange(of: isInputFocused) { _, focused in
+                    if focused && isNearBottom {
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(350))
+                            scrollTarget = Self.bottomAnchorId
+                        }
+                    }
                 }
                 .onChange(of: chatStore.loadingMore) { oldValue, newValue in
                     // When loading finishes, preserve scroll position by scrolling to
@@ -264,10 +268,15 @@ struct MessageListView: View {
             return
         }
 
-        if isNearBottom {
+        // Always auto-scroll for the current user's own messages
+        let isOwnMessage: Bool = {
+            guard let lastMessage = chatStore.messages.last else { return false }
+            return lastMessage.sender.id == (authStore.user?.id ?? "")
+        }()
+
+        if isNearBottom || isOwnMessage {
             logger.debug("Auto-scrolling to new message \(newLastId)")
-            // Auto-scroll to the new message
-            shouldAnimateScroll = true
+            shouldAnimateScroll = false
             scrollTarget = Self.bottomAnchorId
         } else {
             // User is scrolled up — show unread banner
@@ -342,7 +351,7 @@ private extension View {
                 let distanceFromBottom = geometry.contentSize.height
                     - geometry.contentOffset.y
                     - geometry.containerSize.height
-                return distanceFromBottom < 120
+                return distanceFromBottom < 300
             } action: { _, newValue in
                 isNearBottom.wrappedValue = newValue
             }
@@ -356,10 +365,12 @@ private extension View {
 
 #Preview {
     MessageListView(
+        isInputFocused: false,
         emojiPickerMessageId: nil,
         onReact: { _, _ in },
         onLongPress: { _ in },
         onMediaTap: { _ in }
     )
     .environment(ChatStore())
+    .environment(AuthStore())
 }

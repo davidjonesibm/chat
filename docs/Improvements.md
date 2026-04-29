@@ -185,8 +185,6 @@ _Fixes H18–H19, M24–M28_
 
 - Add security headers to Caddyfiles
 - Parameterize hardcoded IP/paths with env vars
-- Create multi-stage Dockerfiles for backend and frontend
-- Create `docker-compose.yml`
 - Update `tsconfig.base.json` (target, remove dead decorator config)
 - Remove ghost `pocketbase` dependency; move hoisted deps to correct packages
 - Widen tilde-locked dependency specifiers, upgrade outdated packages

@@ -19,9 +19,11 @@ struct ChatView: View {
     @State private var pendingGifWidth: Int?
     @State private var pendingGifHeight: Int?
     @State private var selectedMediaURL: IdentifiableURL?
+    @State private var isInputFocused = false
 
     var body: some View {
         MessageListView(
+            isInputFocused: isInputFocused,
             emojiPickerMessageId: emojiPickerMessageId,
             onReact: { messageId, emoji in
                 Task { await chatStore.toggleReaction(messageId: messageId, emoji: emoji) }
@@ -50,6 +52,7 @@ struct ChatView: View {
                     onStartTyping: { Task { await chatStore.startTyping() } },
                     onStopTyping: { Task { await chatStore.stopTyping() } },
                     onGifTapped: { showGiphyPicker = true },
+                    onFocusChange: { focused in isInputFocused = focused },
                     hasPendingAttachment: pendingGifUrl != nil
                 )
             }
@@ -140,4 +143,5 @@ struct ChatView: View {
         ChatView(channelId: "preview-channel", channelName: "general")
     }
     .environment(ChatStore())
+    .environment(AuthStore())
 }

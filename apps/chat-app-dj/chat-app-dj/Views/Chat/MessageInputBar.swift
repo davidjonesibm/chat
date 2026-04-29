@@ -7,10 +7,12 @@ struct MessageInputBar: View {
     let onStartTyping: () -> Void
     let onStopTyping: () -> Void
     var onGifTapped: (() -> Void)?
+    var onFocusChange: ((Bool) -> Void)?
     var hasPendingAttachment: Bool = false
 
     @State private var messageText = ""
     @State private var wasTyping = false
+    @FocusState private var isInputFocused: Bool
 
     private var trimmedText: String {
         messageText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -36,6 +38,7 @@ struct MessageInputBar: View {
 
                 TextField("Message #\(channelName)", text: $messageText)
                     .textFieldStyle(.roundedBorder)
+                    .focused($isInputFocused)
                     .submitLabel(.send)
                     .onSubmit { sendMessage() }
                     .onChange(of: messageText) { _, newValue in
@@ -52,6 +55,9 @@ struct MessageInputBar: View {
             .padding(.vertical, 8)
         }
         .background(.bar)
+        .onChange(of: isInputFocused) { _, newValue in
+            onFocusChange?(newValue)
+        }
     }
 
     // MARK: - Actions
@@ -63,6 +69,8 @@ struct MessageInputBar: View {
         wasTyping = false
         onStopTyping()
         onSend(text)
+        // Keep keyboard up after sending — dismiss only via scroll or tap-outside
+        isInputFocused = true
     }
 
     private func handleTypingChange(_ newValue: String) {

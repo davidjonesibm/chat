@@ -32,7 +32,7 @@ struct GroupChatView: View {
 
             // Dimmed backdrop
             Color.black.opacity(isDrawerOpen ? 0.4 : 0)
-                .ignoresSafeArea()
+                .ignoresSafeArea(.container)
                 .onTapGesture { closeDrawer() }
                 .allowsHitTesting(isDrawerOpen)
 
